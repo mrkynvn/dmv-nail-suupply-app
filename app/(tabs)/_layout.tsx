@@ -1,5 +1,6 @@
 import { Tabs } from 'expo-router';
 import Ionicons from '@expo/vector-icons/Ionicons';
+import { useCart } from '../../src/cart/CartContext';
 
 type IoniconsName = React.ComponentProps<typeof Ionicons>['name'];
 
@@ -12,6 +13,8 @@ const TABS: { name: string; title: string; icon: IoniconsName; activeIcon: Ionic
 ];
 
 export default function TabLayout() {
+  const { totalQuantity } = useCart();
+
   return (
     <Tabs
       screenOptions={{
@@ -27,6 +30,8 @@ export default function TabLayout() {
           name={tab.name}
           options={{
             title: tab.title,
+            tabBarBadge:
+              tab.name === 'cart' && totalQuantity > 0 ? totalQuantity : undefined,
             tabBarIcon: ({ color, size, focused }) => (
               <Ionicons
                 name={focused ? tab.activeIcon : tab.icon}

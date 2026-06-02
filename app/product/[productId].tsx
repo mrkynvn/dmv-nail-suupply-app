@@ -9,10 +9,12 @@ import {
 import { useLocalSearchParams, router } from 'expo-router';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { categories, getProductById } from '../../src/data';
+import { useCart } from '../../src/cart/CartContext';
 
 export default function ProductDetailScreen() {
   const { productId } = useLocalSearchParams<{ productId: string }>();
   const product = getProductById(productId);
+  const { addToCart, getItemQuantity } = useCart();
 
   if (!product) {
     return (
@@ -29,6 +31,7 @@ export default function ProductDetailScreen() {
 
   const category = categories.find((c) => c.id === product.categoryId);
   const outOfStock = !product.inStock;
+  const quantityInCart = getItemQuantity(product.id);
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -129,12 +132,15 @@ export default function ProductDetailScreen() {
         <Pressable
           style={[styles.cartButton, outOfStock && styles.cartButtonDisabled]}
           disabled={outOfStock}
-          onPress={() => console.log(`Add to cart: ${product.id}`)}
+          onPress={() => addToCart(product.id)}
         >
           <Text style={styles.cartButtonText}>
             {outOfStock ? 'Out of Stock' : 'Add to Cart'}
           </Text>
         </Pressable>
+        {quantityInCart > 0 && (
+          <Text style={styles.inCartLabel}>In cart: {quantityInCart}</Text>
+        )}
       </View>
     </SafeAreaView>
   );
@@ -359,6 +365,13 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontWeight: '700',
     fontSize: 16,
+  },
+  inCartLabel: {
+    textAlign: 'center',
+    marginTop: 8,
+    fontSize: 13,
+    fontWeight: '600',
+    color: PINK,
   },
 
   // Not found
