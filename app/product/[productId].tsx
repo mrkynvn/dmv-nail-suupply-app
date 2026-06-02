@@ -10,11 +10,13 @@ import { useLocalSearchParams, router } from 'expo-router';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { categories, getProductById } from '../../src/data';
 import { useCart } from '../../src/cart/CartContext';
+import { useFavorites } from '../../src/favorites/FavoritesContext';
 
 export default function ProductDetailScreen() {
   const { productId } = useLocalSearchParams<{ productId: string }>();
   const product = getProductById(productId);
   const { addToCart, getItemQuantity } = useCart();
+  const { isFavorite, toggleFavorite } = useFavorites();
 
   if (!product) {
     return (
@@ -43,6 +45,13 @@ export default function ProductDetailScreen() {
         <Text style={styles.headerTitle} numberOfLines={1}>
           {product.name}
         </Text>
+        <Pressable style={styles.heartBtn} onPress={() => toggleFavorite(product.id)}>
+          <Ionicons
+            name={isFavorite(product.id) ? 'heart' : 'heart-outline'}
+            size={24}
+            color={isFavorite(product.id) ? PINK : '#999'}
+          />
+        </Pressable>
       </View>
 
       <ScrollView
@@ -173,6 +182,9 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
     color: '#222',
+  },
+  heartBtn: {
+    padding: 4,
   },
 
   // Scroll
