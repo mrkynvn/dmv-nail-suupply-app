@@ -7,6 +7,7 @@ import { categories } from './categories';
 import { Product } from './types';
 
 export function getProductsByCategory(categoryId: string): Product[] {
+  if (categoryId === 'cat-promo') return products.filter((p) => p.isOnSale === true);
   return products.filter((p) => p.categoryId === categoryId);
 }
 

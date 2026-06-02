@@ -10,7 +10,6 @@ const TABS: { name: string; title: string; icon: IoniconsName; activeIcon: Ionic
   { name: 'search',     title: 'Search',     icon: 'search-outline',   activeIcon: 'search' },
   { name: 'cart',       title: 'Cart',        icon: 'cart-outline',     activeIcon: 'cart' },
   { name: 'favorites',  title: 'Fav',         icon: 'heart-outline',    activeIcon: 'heart' },
-  { name: 'promotions', title: 'Promotions',  icon: 'pricetag-outline', activeIcon: 'pricetag' },
   { name: 'account',    title: 'Account',     icon: 'person-outline',   activeIcon: 'person' },
 ];
 

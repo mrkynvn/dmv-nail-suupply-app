@@ -9,4 +9,5 @@ export const categories: Category[] = [
   { id: 'cat-06', name: 'Glitter & Pigments', slug: 'glitter-pigments', icon: '✨' },
   { id: 'cat-07', name: 'Nail Care', slug: 'nail-care', icon: '🌿' },
   { id: 'cat-08', name: 'Accessories', slug: 'accessories', icon: '🛍️' },
+  { id: 'cat-promo', name: 'Promotions', slug: 'promotions', icon: '🏷️' },
 ];
