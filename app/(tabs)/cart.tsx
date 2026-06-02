@@ -107,7 +107,7 @@ export default function CartScreen() {
           <Ionicons name="cart-outline" size={64} color="#DDDDDD" />
           <Text style={styles.emptyTitle}>Your cart is empty</Text>
           <Text style={styles.emptySubtitle}>
-            Add products from the Home or Category pages.
+            Browse categories, search for products, or check out today's promotions.
           </Text>
           <Pressable style={styles.startShoppingBtn} onPress={() => router.push('/')}>
             <Text style={styles.startShoppingText}>Start Shopping</Text>
