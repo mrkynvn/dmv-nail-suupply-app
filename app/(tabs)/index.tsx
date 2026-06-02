@@ -1,6 +1,8 @@
+import { useState } from 'react';
 import {
   View,
   Text,
+  Image,
   ScrollView,
   StyleSheet,
   SafeAreaView,
@@ -9,6 +11,8 @@ import {
 import { router } from 'expo-router';
 import { categories, getFeaturedProducts, getOnSaleProducts } from '../../src/data';
 import { Product, Category } from '../../src/data';
+
+const DMV_LOGO = require('../../assets/images/dmv-logo.png');
 
 // ── Category item ────────────────────────────────────────────────────────────
 
@@ -94,6 +98,8 @@ function ProductSection({ title, products }: { title: string; products: Product[
 export default function HomeScreen() {
   const newProducts = getFeaturedProducts();
   const saleProducts = getOnSaleProducts();
+  const [showAllCategories, setShowAllCategories] = useState(false);
+  const visibleCategories = showAllCategories ? categories : categories.slice(0, 4);
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -104,7 +110,9 @@ export default function HomeScreen() {
       >
         {/* Header */}
         <View style={styles.header}>
-          <Text style={styles.headerTitle}>DMV Nail Supply</Text>
+          <View style={styles.logoWrap}>
+            <Image source={DMV_LOGO} style={styles.headerLogo} resizeMode="contain" />
+          </View>
           <Text style={styles.headerSubtitle}>
             Professional nail products for salons and artists
           </Text>
@@ -117,10 +125,20 @@ export default function HomeScreen() {
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Shop by Category</Text>
           <View style={styles.categoryGrid}>
-            {categories.map((cat) => (
+            {visibleCategories.map((cat) => (
               <CategoryItem key={cat.id} category={cat} />
             ))}
           </View>
+          {categories.length > 4 && (
+            <Pressable
+              style={styles.showMoreBtn}
+              onPress={() => setShowAllCategories((prev) => !prev)}
+            >
+              <Text style={styles.showMoreText}>
+                {showAllCategories ? 'Show less' : 'Show more'}
+              </Text>
+            </Pressable>
+          )}
         </View>
 
         {/* New arrivals */}
@@ -159,11 +177,14 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: '#F0F0F0',
   },
-  headerTitle: {
-    fontSize: 26,
-    fontWeight: '700',
-    color: PINK,
-    letterSpacing: 0.2,
+  logoWrap: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 8,
+  },
+  headerLogo: {
+    width: 160,
+    height: 40,
   },
   headerSubtitle: {
     fontSize: 14,
@@ -213,6 +234,22 @@ const styles = StyleSheet.create({
     color: '#444',
     fontWeight: '500',
     textAlign: 'center',
+  },
+
+  // Show more / less
+  showMoreBtn: {
+    alignSelf: 'center',
+    marginTop: 12,
+    paddingHorizontal: 18,
+    paddingVertical: 6,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: PINK,
+  },
+  showMoreText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: PINK,
   },
 
   // Product row
