@@ -30,7 +30,10 @@ function ProductCard({ product }: { product: Product }) {
   const outOfStock = !product.inStock;
 
   return (
-    <View style={[styles.card, outOfStock && styles.cardOutOfStock]}>
+    <Pressable
+      style={[styles.card, outOfStock && styles.cardOutOfStock]}
+      onPress={() => router.push(`/product/${product.id}`)}
+    >
       {/* Placeholder image */}
       <View style={styles.cardImage}>
         {product.isNew && (
@@ -63,7 +66,7 @@ function ProductCard({ product }: { product: Product }) {
           )}
         </View>
       </View>
-    </View>
+    </Pressable>
   );
 }
 

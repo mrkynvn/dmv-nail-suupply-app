@@ -16,7 +16,10 @@ function GridCard({ product }: { product: Product }) {
   const outOfStock = !product.inStock;
 
   return (
-    <View style={[styles.card, outOfStock && styles.cardOutOfStock]}>
+    <Pressable
+      style={[styles.card, outOfStock && styles.cardOutOfStock]}
+      onPress={() => router.push(`/product/${product.id}`)}
+    >
       <View style={styles.cardImage}>
         {product.isNew && (
           <View style={styles.badgeNew}>
@@ -46,7 +49,7 @@ function GridCard({ product }: { product: Product }) {
           )}
         </View>
       </View>
-    </View>
+    </Pressable>
   );
 }
 
