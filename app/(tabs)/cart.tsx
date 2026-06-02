@@ -5,8 +5,10 @@ import {
   ScrollView,
   SafeAreaView,
   Pressable,
+  Alert,
 } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
+import { useRouter } from 'expo-router';
 import { useCart, CartItem } from '../../src/cart/CartContext';
 import { getProductById } from '../../src/data';
 
@@ -67,16 +69,36 @@ function CartItemRow({
 }
 
 export default function CartScreen() {
-  const { items, subtotal, totalQuantity, incrementQuantity, decrementQuantity, removeFromCart } =
+  const { items, subtotal, totalQuantity, incrementQuantity, decrementQuantity, removeFromCart, clearCart } =
     useCart();
+  const router = useRouter();
+
+  function handleClearCart() {
+    Alert.alert(
+      'Clear cart?',
+      'Remove all items from your cart?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Clear', style: 'destructive', onPress: clearCart },
+      ]
+    );
+  }
+
+  function handleCheckout() {
+    router.push('/checkout');
+  }
 
   return (
     <SafeAreaView style={styles.safeArea}>
       {/* Header */}
       <View style={styles.header}>
         <Text style={styles.headerTitle}>Cart</Text>
-        {totalQuantity > 0 && (
-          <Text style={styles.headerCount}>{totalQuantity} item{totalQuantity !== 1 ? 's' : ''}</Text>
+        {totalQuantity > 0 ? (
+          <Pressable onPress={handleClearCart} hitSlop={8}>
+            <Text style={styles.clearCartText}>Clear Cart</Text>
+          </Pressable>
+        ) : (
+          <Text style={styles.headerCount} />
         )}
       </View>
 
@@ -87,6 +109,9 @@ export default function CartScreen() {
           <Text style={styles.emptySubtitle}>
             Add products from the Home or Category pages.
           </Text>
+          <Pressable style={styles.startShoppingBtn} onPress={() => router.push('/')}>
+            <Text style={styles.startShoppingText}>Start Shopping</Text>
+          </Pressable>
         </View>
       ) : (
         <>
@@ -116,7 +141,7 @@ export default function CartScreen() {
               <Text style={styles.summaryLabel}>Items</Text>
               <Text style={styles.summaryValue}>{totalQuantity}</Text>
             </View>
-            <Pressable style={styles.checkoutBtn} disabled>
+            <Pressable style={styles.checkoutBtn} onPress={handleCheckout}>
               <Text style={styles.checkoutBtnText}>Checkout</Text>
             </Pressable>
           </View>
@@ -152,6 +177,11 @@ const styles = StyleSheet.create({
     color: '#999',
     fontWeight: '500',
   },
+  clearCartText: {
+    fontSize: 13,
+    color: PINK,
+    fontWeight: '600',
+  },
 
   // Empty state
   emptyContainer: {
@@ -171,6 +201,18 @@ const styles = StyleSheet.create({
     color: '#999',
     textAlign: 'center',
     lineHeight: 20,
+  },
+  startShoppingBtn: {
+    backgroundColor: PINK,
+    borderRadius: 12,
+    paddingVertical: 12,
+    paddingHorizontal: 28,
+    marginTop: 8,
+  },
+  startShoppingText: {
+    color: '#fff',
+    fontWeight: '700',
+    fontSize: 15,
   },
 
   // Scroll
@@ -288,7 +330,7 @@ const styles = StyleSheet.create({
     color: '#111',
   },
   checkoutBtn: {
-    backgroundColor: '#CCCCCC',
+    backgroundColor: PINK,
     borderRadius: 12,
     paddingVertical: 15,
     alignItems: 'center',
