@@ -47,6 +47,9 @@ export default function CheckoutScreen() {
             <Pressable style={styles.backToCartBtn} onPress={() => router.back()}>
               <Text style={styles.backToCartText}>Back to Cart</Text>
             </Pressable>
+            <Pressable style={styles.continueShoppingBtn} onPress={() => router.push('/')}>
+              <Text style={styles.continueShoppingText}>Continue Shopping</Text>
+            </Pressable>
           </View>
         ) : (
           <>
@@ -66,10 +69,13 @@ export default function CheckoutScreen() {
                 return (
                   <View key={item.productId} style={styles.lineItem}>
                     <View style={styles.lineItemLeft}>
+                      <Text style={styles.lineItemBrand}>{product.brand}</Text>
                       <Text style={styles.lineItemName} numberOfLines={2}>
                         {product.name}
                       </Text>
-                      <Text style={styles.lineItemQty}>Qty: {item.quantity}</Text>
+                      <Text style={styles.lineItemUnitPrice}>
+                        ${product.price.toFixed(2)} each · Qty: {item.quantity}
+                      </Text>
                     </View>
                     <Text style={styles.lineItemTotal}>${lineTotal.toFixed(2)}</Text>
                   </View>
@@ -81,6 +87,17 @@ export default function CheckoutScreen() {
               <View style={styles.subtotalRow}>
                 <Text style={styles.subtotalLabel}>Subtotal</Text>
                 <Text style={styles.subtotalValue}>${subtotal.toFixed(2)}</Text>
+              </View>
+
+              <Text style={styles.shippingNote}>
+                Shipping and taxes will be calculated at checkout.
+              </Text>
+
+              <View style={styles.divider} />
+
+              <View style={styles.grandTotalRow}>
+                <Text style={styles.grandTotalLabel}>Total</Text>
+                <Text style={styles.grandTotalValue}>${subtotal.toFixed(2)}</Text>
               </View>
             </View>
           </>
@@ -173,6 +190,18 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     fontSize: 15,
   },
+  continueShoppingBtn: {
+    borderWidth: 1,
+    borderColor: PINK,
+    borderRadius: 12,
+    paddingVertical: 12,
+    paddingHorizontal: 28,
+  },
+  continueShoppingText: {
+    color: PINK,
+    fontWeight: '700',
+    fontSize: 15,
+  },
 
   summaryCard: {
     backgroundColor: '#fff',
@@ -209,13 +238,20 @@ const styles = StyleSheet.create({
     flex: 1,
     gap: 2,
   },
+  lineItemBrand: {
+    fontSize: 10,
+    fontWeight: '600',
+    color: '#999',
+    textTransform: 'uppercase',
+    letterSpacing: 0.3,
+  },
   lineItemName: {
     fontSize: 13,
     fontWeight: '600',
     color: '#111',
     lineHeight: 18,
   },
-  lineItemQty: {
+  lineItemUnitPrice: {
     fontSize: 12,
     color: '#999',
   },
@@ -230,12 +266,32 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   subtotalLabel: {
-    fontSize: 15,
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#555',
+  },
+  subtotalValue: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#555',
+  },
+  shippingNote: {
+    fontSize: 11,
+    color: '#AAA',
+    fontStyle: 'italic',
+  },
+  grandTotalRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  grandTotalLabel: {
+    fontSize: 16,
     fontWeight: '700',
     color: '#111',
   },
-  subtotalValue: {
-    fontSize: 15,
+  grandTotalValue: {
+    fontSize: 16,
     fontWeight: '700',
     color: PINK,
   },
