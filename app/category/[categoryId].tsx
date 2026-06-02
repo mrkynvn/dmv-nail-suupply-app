@@ -8,50 +8,8 @@ import {
 } from 'react-native';
 import { useLocalSearchParams, router } from 'expo-router';
 import Ionicons from '@expo/vector-icons/Ionicons';
-import { categories, getProductsByCategory, Product } from '../../src/data';
-
-// ── Product grid card ─────────────────────────────────────────────────────────
-
-function GridCard({ product }: { product: Product }) {
-  const outOfStock = !product.inStock;
-
-  return (
-    <Pressable
-      style={[styles.card, outOfStock && styles.cardOutOfStock]}
-      onPress={() => router.push(`/product/${product.id}`)}
-    >
-      <View style={styles.cardImage}>
-        {product.isNew && (
-          <View style={styles.badgeNew}>
-            <Text style={styles.badgeNewText}>New</Text>
-          </View>
-        )}
-        {product.isOnSale && (
-          <View style={styles.badgeSale}>
-            <Text style={styles.badgeSaleText}>Sale</Text>
-          </View>
-        )}
-        {outOfStock && (
-          <View style={styles.outOfStockOverlay}>
-            <Text style={styles.outOfStockText}>Out of Stock</Text>
-          </View>
-        )}
-      </View>
-      <View style={styles.cardContent}>
-        <Text style={styles.cardBrand} numberOfLines={1}>{product.brand}</Text>
-        <Text style={styles.cardName} numberOfLines={2}>{product.name}</Text>
-        <View style={styles.cardPriceRow}>
-          <Text style={styles.cardPrice}>${product.price.toFixed(2)}</Text>
-          {product.originalPrice != null && (
-            <Text style={styles.cardOriginalPrice}>
-              ${product.originalPrice.toFixed(2)}
-            </Text>
-          )}
-        </View>
-      </View>
-    </Pressable>
-  );
-}
+import { categories, getProductsByCategory } from '../../src/data';
+import { ProductCard } from '../../components/products/ProductCard';
 
 // ── Category screen ───────────────────────────────────────────────────────────
 
@@ -107,7 +65,14 @@ export default function CategoryScreen() {
         ) : (
           <View style={styles.grid}>
             {categoryProducts.map((product) => (
-              <GridCard key={product.id} product={product} />
+              <ProductCard
+                key={product.id}
+                product={product}
+                onPress={() => router.push(`/product/${product.id}`)}
+                showFavorite
+                imageHeight={140}
+                style={styles.gridCard}
+              />
             ))}
           </View>
         )}
@@ -175,101 +140,10 @@ const styles = StyleSheet.create({
     flexWrap: 'wrap',
     gap: 12,
   },
-
-  // Product card
-  card: {
-    // Each card takes just under half the container so two fit per row with the gap
+  gridCard: {
     flexBasis: '48%',
     flexGrow: 1,
     maxWidth: '50%',
-    backgroundColor: '#fff',
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: '#EEEEEE',
-    overflow: 'hidden',
-  },
-  cardOutOfStock: {
-    opacity: 0.6,
-  },
-  cardImage: {
-    width: '100%',
-    height: 140,
-    backgroundColor: '#F0EFF4',
-    position: 'relative',
-    justifyContent: 'flex-end',
-    alignItems: 'flex-start',
-    padding: 8,
-  },
-  cardContent: {
-    padding: 10,
-    gap: 4,
-  },
-  cardBrand: {
-    fontSize: 11,
-    color: '#999',
-    fontWeight: '500',
-    textTransform: 'uppercase',
-    letterSpacing: 0.3,
-  },
-  cardName: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: '#222',
-    lineHeight: 18,
-  },
-  cardPriceRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    marginTop: 2,
-  },
-  cardPrice: {
-    fontSize: 14,
-    fontWeight: '700',
-    color: '#222',
-  },
-  cardOriginalPrice: {
-    fontSize: 12,
-    color: '#AAAAAA',
-    textDecorationLine: 'line-through',
-  },
-
-  // Badges
-  badgeNew: {
-    backgroundColor: '#FCE4EC',
-    borderRadius: 6,
-    paddingHorizontal: 7,
-    paddingVertical: 3,
-  },
-  badgeNewText: {
-    fontSize: 10,
-    fontWeight: '700',
-    color: PINK,
-  },
-  badgeSale: {
-    backgroundColor: '#FFF3E0',
-    borderRadius: 6,
-    paddingHorizontal: 7,
-    paddingVertical: 3,
-  },
-  badgeSaleText: {
-    fontSize: 10,
-    fontWeight: '700',
-    color: '#E65100',
-  },
-  outOfStockOverlay: {
-    position: 'absolute',
-    top: 8,
-    right: 8,
-    backgroundColor: 'rgba(0,0,0,0.55)',
-    borderRadius: 6,
-    paddingHorizontal: 7,
-    paddingVertical: 3,
-  },
-  outOfStockText: {
-    fontSize: 10,
-    fontWeight: '600',
-    color: '#fff',
   },
 
   // Not found

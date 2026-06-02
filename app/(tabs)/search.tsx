@@ -12,6 +12,7 @@ import { router } from 'expo-router';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { categories, searchProducts } from '../../src/data';
 import { Product } from '../../src/data/types';
+import { ProductCard } from '../../components/products/ProductCard';
 
 const PINK = '#D81B60';
 
@@ -81,54 +82,14 @@ export default function SearchScreen() {
         renderItem={({ item }) => {
           const cat = categoryById.get(item.categoryId);
           return (
-            <Pressable
-              style={styles.card}
+            <ProductCard
+              product={item}
               onPress={() => router.push(`/product/${item.id}`)}
-            >
-              {/* Image placeholder */}
-              <View style={styles.imagePlaceholder}>
-                <Text style={styles.imagePlaceholderLabel}>{item.id}</Text>
-              </View>
-
-              <View style={styles.cardBody}>
-                {/* Badges */}
-                <View style={styles.badgeRow}>
-                  {item.isNew && (
-                    <View style={styles.badgeNew}>
-                      <Text style={styles.badgeNewText}>New</Text>
-                    </View>
-                  )}
-                  {item.isOnSale && (
-                    <View style={styles.badgeSale}>
-                      <Text style={styles.badgeSaleText}>Sale</Text>
-                    </View>
-                  )}
-                  {!item.inStock && (
-                    <View style={styles.badgeOos}>
-                      <Text style={styles.badgeOosText}>Out of Stock</Text>
-                    </View>
-                  )}
-                </View>
-
-                <Text style={styles.brand}>{item.brand}</Text>
-                <Text style={styles.name} numberOfLines={2}>{item.name}</Text>
-                {cat && (
-                  <Text style={styles.categoryLabel}>
-                    {cat.icon} {cat.name}
-                  </Text>
-                )}
-
-                {/* Pricing */}
-                <View style={styles.priceRow}>
-                  <Text style={styles.price}>${item.price.toFixed(2)}</Text>
-                  {item.originalPrice != null && (
-                    <Text style={styles.originalPrice}>
-                      ${item.originalPrice.toFixed(2)}
-                    </Text>
-                  )}
-                </View>
-              </View>
-            </Pressable>
+              showFavorite
+              imageHeight={140}
+              categoryLabel={cat ? `${cat.icon} ${cat.name}` : undefined}
+              style={styles.searchCard}
+            />
           );
         }}
       />
@@ -219,104 +180,9 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
 
-  // Result card
-  card: {
-    backgroundColor: '#fff',
-    borderRadius: 14,
+  // Search result card wrapper (spacing between items)
+  searchCard: {
     marginBottom: 12,
-    overflow: 'hidden',
-    borderWidth: 1,
-    borderColor: '#F0F0F0',
-  },
-  imagePlaceholder: {
-    width: '100%',
-    height: 140,
-    backgroundColor: '#F0EFF4',
-    justifyContent: 'flex-end',
-    alignItems: 'flex-start',
-    padding: 10,
-  },
-  imagePlaceholderLabel: {
-    fontSize: 10,
-    color: '#BBBBBE',
-    fontWeight: '500',
-  },
-  cardBody: {
-    padding: 14,
-    gap: 4,
-  },
-  badgeRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 6,
-    marginBottom: 4,
-  },
-  badgeNew: {
-    backgroundColor: '#FCE4EC',
-    borderRadius: 5,
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-  },
-  badgeNewText: {
-    fontSize: 10,
-    fontWeight: '700',
-    color: PINK,
-  },
-  badgeSale: {
-    backgroundColor: '#FFF3E0',
-    borderRadius: 5,
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-  },
-  badgeSaleText: {
-    fontSize: 10,
-    fontWeight: '700',
-    color: '#E65100',
-  },
-  badgeOos: {
-    backgroundColor: '#EEEEEE',
-    borderRadius: 5,
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-  },
-  badgeOosText: {
-    fontSize: 10,
-    fontWeight: '700',
-    color: '#666',
-  },
-  brand: {
-    fontSize: 11,
-    color: '#999',
-    fontWeight: '500',
-    textTransform: 'uppercase',
-    letterSpacing: 0.4,
-  },
-  name: {
-    fontSize: 15,
-    fontWeight: '600',
-    color: '#111',
-    lineHeight: 20,
-  },
-  categoryLabel: {
-    fontSize: 12,
-    color: '#7B1FA2',
-    fontWeight: '500',
-  },
-  priceRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    marginTop: 4,
-  },
-  price: {
-    fontSize: 17,
-    fontWeight: '700',
-    color: '#111',
-  },
-  originalPrice: {
-    fontSize: 13,
-    color: '#AAAAAA',
-    textDecorationLine: 'line-through',
   },
 
   // Empty state

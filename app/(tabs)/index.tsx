@@ -11,6 +11,7 @@ import {
 import { router } from 'expo-router';
 import { categories, getFeaturedProducts, getOnSaleProducts } from '../../src/data';
 import { Product, Category } from '../../src/data';
+import { ProductCard } from '../../components/products/ProductCard';
 
 const DMV_LOGO = require('../../assets/images/dmv-logo.png');
 
@@ -28,52 +29,6 @@ function CategoryItem({ category }: { category: Category }) {
   );
 }
 
-// ── Product card ─────────────────────────────────────────────────────────────
-
-function ProductCard({ product }: { product: Product }) {
-  const outOfStock = !product.inStock;
-
-  return (
-    <Pressable
-      style={[styles.card, outOfStock && styles.cardOutOfStock]}
-      onPress={() => router.push(`/product/${product.id}`)}
-    >
-      {/* Placeholder image */}
-      <View style={styles.cardImage}>
-        {product.isNew && (
-          <View style={styles.badgeNew}>
-            <Text style={styles.badgeNewText}>New</Text>
-          </View>
-        )}
-        {product.isOnSale && (
-          <View style={styles.badgeSale}>
-            <Text style={styles.badgeSaleText}>Sale</Text>
-          </View>
-        )}
-        {outOfStock && (
-          <View style={styles.outOfStockOverlay}>
-            <Text style={styles.outOfStockText}>Out of Stock</Text>
-          </View>
-        )}
-      </View>
-
-      {/* Card content */}
-      <View style={styles.cardContent}>
-        <Text style={styles.cardBrand} numberOfLines={1}>{product.brand}</Text>
-        <Text style={styles.cardName} numberOfLines={2}>{product.name}</Text>
-        <View style={styles.cardPriceRow}>
-          <Text style={styles.cardPrice}>${product.price.toFixed(2)}</Text>
-          {product.originalPrice != null && (
-            <Text style={styles.cardOriginalPrice}>
-              ${product.originalPrice.toFixed(2)}
-            </Text>
-          )}
-        </View>
-      </View>
-    </Pressable>
-  );
-}
-
 // ── Product section (horizontal scroll) ─────────────────────────────────────
 
 function ProductSection({ title, products }: { title: string; products: Product[] }) {
@@ -86,7 +41,13 @@ function ProductSection({ title, products }: { title: string; products: Product[
         contentContainerStyle={styles.productRow}
       >
         {products.map((product) => (
-          <ProductCard key={product.id} product={product} />
+          <ProductCard
+            key={product.id}
+            product={product}
+            onPress={() => router.push(`/product/${product.id}`)}
+            showFavorite
+            style={{ width: 165 }}
+          />
         ))}
       </ScrollView>
     </View>
@@ -154,7 +115,6 @@ export default function HomeScreen() {
 // ── Styles ───────────────────────────────────────────────────────────────────
 
 const PINK = '#D81B60';
-const CARD_WIDTH = 165;
 
 const styles = StyleSheet.create({
   safeArea: {
@@ -256,100 +216,5 @@ const styles = StyleSheet.create({
   productRow: {
     paddingBottom: 4,
     gap: 12,
-  },
-
-  // Product card
-  card: {
-    width: CARD_WIDTH,
-    backgroundColor: '#fff',
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: '#EEEEEE',
-    overflow: 'hidden',
-  },
-  cardOutOfStock: {
-    opacity: 0.6,
-  },
-  cardImage: {
-    width: CARD_WIDTH,
-    height: 150,
-    backgroundColor: '#F0EFF4',
-    position: 'relative',
-    justifyContent: 'flex-end',
-    alignItems: 'flex-start',
-    padding: 8,
-  },
-  cardContent: {
-    padding: 10,
-    gap: 4,
-  },
-  cardBrand: {
-    fontSize: 11,
-    color: '#999',
-    fontWeight: '500',
-    textTransform: 'uppercase',
-    letterSpacing: 0.3,
-  },
-  cardName: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: '#222',
-    lineHeight: 18,
-  },
-  cardPriceRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    marginTop: 2,
-  },
-  cardPrice: {
-    fontSize: 14,
-    fontWeight: '700',
-    color: '#222',
-  },
-  cardOriginalPrice: {
-    fontSize: 12,
-    color: '#AAAAAA',
-    textDecorationLine: 'line-through',
-  },
-
-  // Badges
-  badgeNew: {
-    backgroundColor: '#FCE4EC',
-    borderRadius: 6,
-    paddingHorizontal: 7,
-    paddingVertical: 3,
-  },
-  badgeNewText: {
-    fontSize: 10,
-    fontWeight: '700',
-    color: PINK,
-  },
-  badgeSale: {
-    backgroundColor: '#FFF3E0',
-    borderRadius: 6,
-    paddingHorizontal: 7,
-    paddingVertical: 3,
-  },
-  badgeSaleText: {
-    fontSize: 10,
-    fontWeight: '700',
-    color: '#E65100',
-  },
-
-  // Out of stock
-  outOfStockOverlay: {
-    position: 'absolute',
-    top: 8,
-    right: 8,
-    backgroundColor: 'rgba(0,0,0,0.55)',
-    borderRadius: 6,
-    paddingHorizontal: 7,
-    paddingVertical: 3,
-  },
-  outOfStockText: {
-    fontSize: 10,
-    fontWeight: '600',
-    color: '#fff',
   },
 });
