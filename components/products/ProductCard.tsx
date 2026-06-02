@@ -2,6 +2,7 @@ import { View, Text, StyleSheet, Pressable, StyleProp, ViewStyle } from 'react-n
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { Product } from '../../src/data/types';
 import { useFavorites } from '../../src/favorites/FavoritesContext';
+import { useCart } from '../../src/cart/CartContext';
 
 const PINK = '#D81B60';
 
@@ -9,6 +10,7 @@ type ProductCardProps = {
   product: Product;
   onPress: () => void;
   showFavorite?: boolean;
+  showQuickAdd?: boolean;
   categoryLabel?: string;
   imageHeight?: number;
   style?: StyleProp<ViewStyle>;
@@ -18,11 +20,13 @@ export function ProductCard({
   product,
   onPress,
   showFavorite = false,
+  showQuickAdd = true,
   categoryLabel,
   imageHeight = 150,
   style,
 }: ProductCardProps) {
   const { isFavorite, toggleFavorite } = useFavorites();
+  const { addToCart } = useCart();
   const favorited = isFavorite(product.id);
   const outOfStock = !product.inStock;
 
@@ -47,7 +51,7 @@ export function ProductCard({
           )}
         </View>
 
-        {/* Bottom-right: Out of Stock */}
+        {/* Bottom-right: Out of Stock label */}
         {outOfStock && (
           <View style={styles.oosOverlay}>
             <Text style={styles.oosText}>Out of Stock</Text>
@@ -77,12 +81,31 @@ export function ProductCard({
         ) : null}
         <Text style={styles.brand} numberOfLines={1}>{product.brand}</Text>
         <Text style={styles.name} numberOfLines={2}>{product.name}</Text>
-        <View style={styles.priceRow}>
-          <Text style={styles.price}>${product.price.toFixed(2)}</Text>
-          {product.originalPrice != null && (
-            <Text style={styles.originalPrice}>
-              ${product.originalPrice.toFixed(2)}
-            </Text>
+
+        {/* Footer: price (left) + quick-add button (right) */}
+        <View style={styles.footerRow}>
+          <View style={styles.priceBlock}>
+            <Text style={styles.price}>${product.price.toFixed(2)}</Text>
+            {product.originalPrice != null && (
+              <Text style={styles.originalPrice}>
+                ${product.originalPrice.toFixed(2)}
+              </Text>
+            )}
+          </View>
+
+          {showQuickAdd && (
+            <Pressable
+              style={[styles.addBtn, outOfStock && styles.addBtnDisabled]}
+              onPress={() => addToCart(product.id)}
+              disabled={outOfStock}
+              hitSlop={6}
+            >
+              {outOfStock ? (
+                <Text style={styles.addBtnOosText}>Out</Text>
+              ) : (
+                <Ionicons name="add" size={18} color="#fff" />
+              )}
+            </Pressable>
           )}
         </View>
       </View>
@@ -93,19 +116,19 @@ export function ProductCard({
 const styles = StyleSheet.create({
   card: {
     backgroundColor: '#fff',
-    borderRadius: 12,
+    borderRadius: 14,
     borderWidth: 1,
-    borderColor: '#EEEEEE',
+    borderColor: '#E8E8E8',
     overflow: 'hidden',
   },
   cardOutOfStock: {
-    opacity: 0.6,
+    opacity: 0.65,
   },
 
-  // Image placeholder area
+  // Image placeholder
   imageArea: {
     width: '100%',
-    backgroundColor: '#F0EFF4',
+    backgroundColor: '#EEEDF4',
     justifyContent: 'flex-end',
     alignItems: 'flex-start',
     padding: 8,
@@ -154,7 +177,7 @@ const styles = StyleSheet.create({
     position: 'absolute',
     top: 8,
     right: 8,
-    backgroundColor: 'rgba(255,255,255,0.88)',
+    backgroundColor: 'rgba(255,255,255,0.90)',
     borderRadius: 16,
     padding: 5,
   },
@@ -162,7 +185,7 @@ const styles = StyleSheet.create({
   // Content
   content: {
     padding: 10,
-    gap: 4,
+    gap: 3,
   },
   categoryLabel: {
     fontSize: 12,
@@ -170,32 +193,60 @@ const styles = StyleSheet.create({
     fontWeight: '500',
   },
   brand: {
-    fontSize: 11,
-    color: '#999',
-    fontWeight: '500',
+    fontSize: 10,
+    color: '#AAAAAA',
+    fontWeight: '600',
     textTransform: 'uppercase',
-    letterSpacing: 0.3,
+    letterSpacing: 0.4,
   },
   name: {
     fontSize: 13,
     fontWeight: '600',
-    color: '#222',
+    color: '#1A1A1A',
     lineHeight: 18,
   },
-  priceRow: {
+
+  // Footer row
+  footerRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
-    marginTop: 2,
+    marginTop: 6,
+    gap: 8,
+  },
+  priceBlock: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    flexWrap: 'wrap',
   },
   price: {
     fontSize: 14,
     fontWeight: '700',
-    color: '#222',
+    color: '#1A1A1A',
   },
   originalPrice: {
-    fontSize: 12,
-    color: '#AAAAAA',
+    fontSize: 11,
+    color: '#BBBBBB',
     textDecorationLine: 'line-through',
+  },
+
+  // Quick-add button
+  addBtn: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: PINK,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  addBtnDisabled: {
+    backgroundColor: '#EBEBEB',
+  },
+  addBtnOosText: {
+    fontSize: 9,
+    fontWeight: '700',
+    color: '#AAAAAA',
+    letterSpacing: 0.2,
   },
 });
