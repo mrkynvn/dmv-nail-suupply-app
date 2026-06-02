@@ -6,6 +6,7 @@ import {
   SafeAreaView,
   Pressable,
 } from 'react-native';
+import { router } from 'expo-router';
 import { categories, getFeaturedProducts, getOnSaleProducts } from '../../src/data';
 import { Product, Category } from '../../src/data';
 
@@ -13,7 +14,10 @@ import { Product, Category } from '../../src/data';
 
 function CategoryItem({ category }: { category: Category }) {
   return (
-    <Pressable style={styles.categoryItem}>
+    <Pressable
+      style={styles.categoryItem}
+      onPress={() => router.push(`/category/${category.id}`)}
+    >
       <Text style={styles.categoryIcon}>{category.icon}</Text>
       <Text style={styles.categoryName}>{category.name}</Text>
     </Pressable>
