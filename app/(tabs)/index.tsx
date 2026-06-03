@@ -31,10 +31,25 @@ function CategoryItem({ category }: { category: Category }) {
 
 // ── Product section (horizontal scroll) ─────────────────────────────────────
 
-function ProductSection({ title, products }: { title: string; products: Product[] }) {
+function ProductSection({
+  title,
+  products,
+  onSeeAll,
+}: {
+  title: string;
+  products: Product[];
+  onSeeAll?: () => void;
+}) {
   return (
     <View style={styles.section}>
-      <Text style={styles.sectionTitle}>{title}</Text>
+      <View style={styles.sectionHeader}>
+        <Text style={styles.sectionTitle}>{title}</Text>
+        {onSeeAll && (
+          <Pressable onPress={onSeeAll} hitSlop={8}>
+            <Text style={styles.seeAllText}>See All</Text>
+          </Pressable>
+        )}
+      </View>
       <ScrollView
         horizontal
         showsHorizontalScrollIndicator={false}
@@ -106,7 +121,11 @@ export default function HomeScreen() {
         <ProductSection title="New Arrivals" products={newProducts} />
 
         {/* On sale */}
-        <ProductSection title="On Sale" products={saleProducts} />
+        <ProductSection
+          title="On Sale"
+          products={saleProducts}
+          onSeeAll={() => router.push('/promotions')}
+        />
       </ScrollView>
     </SafeAreaView>
   );
@@ -163,11 +182,21 @@ const styles = StyleSheet.create({
     marginTop: 24,
     paddingHorizontal: 20,
   },
+  sectionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 14,
+  },
   sectionTitle: {
     fontSize: 17,
     fontWeight: '700',
     color: '#222',
-    marginBottom: 14,
+  },
+  seeAllText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: PINK,
   },
 
   // Category grid
