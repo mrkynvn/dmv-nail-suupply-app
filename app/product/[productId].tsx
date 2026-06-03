@@ -1,3 +1,4 @@
+import { useEffect, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -18,6 +19,16 @@ export default function ProductDetailScreen() {
   const { addToCart, getItemQuantity } = useCart();
   const { isFavorite, toggleFavorite } = useFavorites();
 
+  const [qty, setQty] = useState(1);
+  const [showConfirm, setShowConfirm] = useState(false);
+  const confirmTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (confirmTimer.current) clearTimeout(confirmTimer.current);
+    };
+  }, []);
+
   if (!product) {
     return (
       <SafeAreaView style={styles.safeArea}>
@@ -34,6 +45,13 @@ export default function ProductDetailScreen() {
   const category = categories.find((c) => c.id === product.categoryId);
   const outOfStock = !product.inStock;
   const quantityInCart = getItemQuantity(product.id);
+
+  const handleAddToCart = () => {
+    addToCart(product.id, qty);
+    setShowConfirm(true);
+    if (confirmTimer.current) clearTimeout(confirmTimer.current);
+    confirmTimer.current = setTimeout(() => setShowConfirm(false), 2000);
+  };
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -99,7 +117,9 @@ export default function ProductDetailScreen() {
         {/* Pricing */}
         <View style={styles.section}>
           <View style={styles.priceRow}>
-            <Text style={styles.price}>${product.price.toFixed(2)}</Text>
+            <Text style={[styles.price, product.isOnSale && styles.priceSale]}>
+              ${product.price.toFixed(2)}
+            </Text>
             {product.originalPrice != null && (
               <Text style={styles.originalPrice}>
                 ${product.originalPrice.toFixed(2)}
@@ -136,20 +156,52 @@ export default function ProductDetailScreen() {
         <View style={styles.buttonSpacer} />
       </ScrollView>
 
-      {/* Add to Cart */}
+      {/* Add to Cart bar */}
       <View style={styles.cartBar}>
+        {/* Quantity selector */}
+        <View style={styles.quantityRow}>
+          <Pressable
+            style={[styles.qtyBtn, (qty <= 1 || outOfStock) && styles.qtyBtnDisabled]}
+            onPress={() => setQty((q) => Math.max(1, q - 1))}
+            disabled={qty <= 1 || outOfStock}
+            hitSlop={8}
+          >
+            <Text style={[styles.qtyBtnText, (qty <= 1 || outOfStock) && styles.qtyBtnTextDisabled]}>
+              −
+            </Text>
+          </Pressable>
+          <Text style={styles.qtyValue}>{qty}</Text>
+          <Pressable
+            style={[styles.qtyBtn, outOfStock && styles.qtyBtnDisabled]}
+            onPress={() => setQty((q) => q + 1)}
+            disabled={outOfStock}
+            hitSlop={8}
+          >
+            <Text style={[styles.qtyBtnText, outOfStock && styles.qtyBtnTextDisabled]}>
+              +
+            </Text>
+          </Pressable>
+        </View>
+
+        {/* Add to Cart button */}
         <Pressable
           style={[styles.cartButton, outOfStock && styles.cartButtonDisabled]}
           disabled={outOfStock}
-          onPress={() => addToCart(product.id)}
+          onPress={handleAddToCart}
         >
           <Text style={styles.cartButtonText}>
             {outOfStock ? 'Out of Stock' : 'Add to Cart'}
           </Text>
         </Pressable>
-        {quantityInCart > 0 && (
-          <Text style={styles.inCartLabel}>In cart: {quantityInCart}</Text>
-        )}
+
+        {/* Confirmation / View Cart */}
+        {showConfirm ? (
+          <Text style={styles.confirmLabel}>Added {qty} to cart</Text>
+        ) : quantityInCart > 0 && !outOfStock ? (
+          <Pressable onPress={() => router.push('/(tabs)/cart')}>
+            <Text style={styles.viewCartLabel}>View Cart ({quantityInCart})</Text>
+          </Pressable>
+        ) : null}
       </View>
     </SafeAreaView>
   );
@@ -310,6 +362,9 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: '#111',
   },
+  priceSale: {
+    color: PINK,
+  },
   originalPrice: {
     fontSize: 17,
     color: '#AAAAAA',
@@ -362,8 +417,48 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     borderTopColor: '#F0F0F0',
     paddingHorizontal: 20,
-    paddingVertical: 14,
+    paddingTop: 12,
+    paddingBottom: 14,
+    gap: 10,
   },
+
+  // Quantity selector
+  quantityRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 20,
+  },
+  qtyBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    borderWidth: 1.5,
+    borderColor: PINK,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  qtyBtnDisabled: {
+    borderColor: '#DDDDDD',
+  },
+  qtyBtnText: {
+    fontSize: 20,
+    fontWeight: '600',
+    color: PINK,
+    lineHeight: 24,
+  },
+  qtyBtnTextDisabled: {
+    color: '#CCCCCC',
+  },
+  qtyValue: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#111',
+    minWidth: 28,
+    textAlign: 'center',
+  },
+
+  // Add to Cart button
   cartButton: {
     backgroundColor: PINK,
     borderRadius: 12,
@@ -378,12 +473,20 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     fontSize: 16,
   },
-  inCartLabel: {
+
+  // Confirmation / View Cart
+  confirmLabel: {
     textAlign: 'center',
-    marginTop: 8,
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#388E3C',
+  },
+  viewCartLabel: {
+    textAlign: 'center',
     fontSize: 13,
     fontWeight: '600',
     color: PINK,
+    textDecorationLine: 'underline',
   },
 
   // Not found
