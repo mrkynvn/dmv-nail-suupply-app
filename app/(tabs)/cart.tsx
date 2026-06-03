@@ -42,7 +42,14 @@ function CartItemRow({
         <Text style={styles.itemName} numberOfLines={2}>
           {product.name}
         </Text>
-        <Text style={styles.itemPrice}>${product.price.toFixed(2)} each</Text>
+        {product.isOnSale && product.originalPrice ? (
+          <View style={styles.priceRow}>
+            <Text style={styles.itemPriceOriginal}>${product.originalPrice.toFixed(2)}</Text>
+            <Text style={styles.itemPriceSale}>${product.price.toFixed(2)} each</Text>
+          </View>
+        ) : (
+          <Text style={styles.itemPrice}>${product.price.toFixed(2)} each</Text>
+        )}
 
         <View style={styles.itemBottom}>
           {/* Quantity controls */}
@@ -83,6 +90,12 @@ export default function CartScreen() {
       ]
     );
   }
+
+  const savings = items.reduce((sum, item) => {
+    const p = getProductById(item.productId);
+    if (!p?.isOnSale || !p.originalPrice) return sum;
+    return sum + (p.originalPrice - p.price) * item.quantity;
+  }, 0);
 
   function handleCheckout() {
     router.push('/checkout');
@@ -134,15 +147,18 @@ export default function CartScreen() {
           {/* Summary bar */}
           <View style={styles.summaryBar}>
             <View style={styles.summaryRow}>
-              <Text style={styles.summaryLabel}>Subtotal</Text>
+              <Text style={styles.summaryLabel}>
+                Subtotal ({totalQuantity} {totalQuantity === 1 ? 'item' : 'items'})
+              </Text>
               <Text style={styles.summaryValue}>${subtotal.toFixed(2)}</Text>
             </View>
-            <View style={styles.summaryRow}>
-              <Text style={styles.summaryLabel}>Items</Text>
-              <Text style={styles.summaryValue}>{totalQuantity}</Text>
-            </View>
+            {savings > 0.005 && (
+              <View style={styles.summaryRow}>
+                <Text style={styles.savingsText}>You save ${savings.toFixed(2)}</Text>
+              </View>
+            )}
             <Pressable style={styles.checkoutBtn} onPress={handleCheckout}>
-              <Text style={styles.checkoutBtnText}>Checkout</Text>
+              <Text style={styles.checkoutBtnText}>Proceed to Checkout</Text>
             </Pressable>
           </View>
         </>
@@ -268,6 +284,21 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: '#777',
   },
+  priceRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  itemPriceOriginal: {
+    fontSize: 11,
+    color: '#BBB',
+    textDecorationLine: 'line-through',
+  },
+  itemPriceSale: {
+    fontSize: 12,
+    color: PINK,
+    fontWeight: '600',
+  },
   itemBottom: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -328,6 +359,11 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '700',
     color: '#111',
+  },
+  savingsText: {
+    fontSize: 12,
+    color: '#2E7D32',
+    fontWeight: '600',
   },
   checkoutBtn: {
     backgroundColor: PINK,
