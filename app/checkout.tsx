@@ -30,6 +30,31 @@ type FormFields = {
 
 type FormErrors = Partial<Record<keyof FormFields, string>>;
 
+type OrderItem = {
+  productId: string;
+  name: string;
+  brand: string;
+  quantity: number;
+  unitPrice: number;
+  lineTotal: number;
+};
+
+type OrderSnapshot = {
+  orderNumber: string;
+  contact: FormFields;
+  items: OrderItem[];
+  total: number;
+};
+
+function generateOrderNumber(): string {
+  const now = new Date();
+  const y = now.getFullYear();
+  const m = String(now.getMonth() + 1).padStart(2, '0');
+  const d = String(now.getDate()).padStart(2, '0');
+  const rand = String(Math.floor(1000 + Math.random() * 9000));
+  return `DMV-${y}${m}${d}-${rand}`;
+}
+
 const EMPTY_FORM: FormFields = {
   fullName: '',
   email: '',
@@ -64,6 +89,7 @@ export default function CheckoutScreen() {
   const [form, setForm] = useState<FormFields>(EMPTY_FORM);
   const [errors, setErrors] = useState<FormErrors>({});
   const [submitted, setSubmitted] = useState(false);
+  const [orderSnapshot, setOrderSnapshot] = useState<OrderSnapshot | null>(null);
 
   function setField(key: keyof FormFields, value: string) {
     setForm((prev) => ({ ...prev, [key]: value }));
@@ -76,11 +102,56 @@ export default function CheckoutScreen() {
       setErrors(validationErrors);
       return;
     }
+    const snapshotItems: OrderItem[] = items
+      .map((item) => {
+        const product = getProductById(item.productId);
+        if (!product) return null;
+        return {
+          productId: item.productId,
+          name: product.name,
+          brand: product.brand ?? '',
+          quantity: item.quantity,
+          unitPrice: product.price,
+          lineTotal: product.price * item.quantity,
+        };
+      })
+      .filter((x): x is OrderItem => x !== null);
+    const snapshot: OrderSnapshot = {
+      orderNumber: generateOrderNumber(),
+      contact: { ...form },
+      items: snapshotItems,
+      total: subtotal,
+    };
+    setOrderSnapshot(snapshot);
     clearCart();
     setSubmitted(true);
   }
 
   if (submitted) {
+    if (!orderSnapshot) {
+      return (
+        <SafeAreaView style={styles.safeArea}>
+          <View style={styles.header}>
+            <View style={styles.headerSpacer} />
+            <Text style={styles.headerTitle}>Order Placed</Text>
+            <View style={styles.headerSpacer} />
+          </View>
+          <View style={styles.successContainer}>
+            <Ionicons name="checkmark-circle" size={72} color={PINK} />
+            <Text style={styles.successTitle}>Order submitted</Text>
+            <Text style={styles.successMessage}>
+              Thank you! We'll contact you to confirm your order.
+            </Text>
+            <Pressable style={styles.continueShoppingBtn} onPress={() => router.push('/')}>
+              <Text style={styles.continueShoppingText}>Continue Shopping</Text>
+            </Pressable>
+          </View>
+        </SafeAreaView>
+      );
+    }
+
+    const { orderNumber, contact, items: snapItems, total } = orderSnapshot;
+
     return (
       <SafeAreaView style={styles.safeArea}>
         <View style={styles.header}>
@@ -88,21 +159,86 @@ export default function CheckoutScreen() {
           <Text style={styles.headerTitle}>Order Placed</Text>
           <View style={styles.headerSpacer} />
         </View>
-        <View style={styles.successContainer}>
-          <View style={styles.successIconWrap}>
-            <Ionicons name="checkmark-circle" size={72} color={PINK} />
+        <ScrollView
+          style={styles.scroll}
+          contentContainerStyle={styles.scrollContent}
+          showsVerticalScrollIndicator={false}
+        >
+          {/* Hero */}
+          <View style={styles.confirmHero}>
+            <Ionicons name="checkmark-circle" size={64} color={PINK} />
+            <Text style={styles.successTitle}>Order submitted</Text>
+            <Text style={styles.successMessage}>
+              Thank you! We'll contact you to confirm your order.
+            </Text>
+            <View style={styles.orderNumberBadge}>
+              <Text style={styles.orderNumberLabel}>Order Number</Text>
+              <Text style={styles.orderNumberValue}>{orderNumber}</Text>
+            </View>
           </View>
-          <Text style={styles.successTitle}>Order submitted</Text>
-          <Text style={styles.successMessage}>
-            Thank you! We'll contact you to confirm your order.
+
+          {/* Order Summary card */}
+          <View style={styles.confirmCard}>
+            <Text style={styles.sectionTitle}>Order Summary</Text>
+            <Text style={styles.itemCount}>
+              {snapItems.reduce((s, i) => s + i.quantity, 0)} item
+              {snapItems.reduce((s, i) => s + i.quantity, 0) !== 1 ? 's' : ''}
+            </Text>
+            <View style={styles.divider} />
+            {snapItems.map((item) => (
+              <View key={item.productId} style={styles.lineItem}>
+                <View style={styles.lineItemLeft}>
+                  {item.brand ? (
+                    <Text style={styles.lineItemBrand}>{item.brand}</Text>
+                  ) : null}
+                  <Text style={styles.lineItemName} numberOfLines={2}>
+                    {item.name}
+                  </Text>
+                  <Text style={styles.lineItemUnitPrice}>
+                    ${item.unitPrice.toFixed(2)} each · Qty: {item.quantity}
+                  </Text>
+                </View>
+                <Text style={styles.lineItemTotal}>${item.lineTotal.toFixed(2)}</Text>
+              </View>
+            ))}
+            <View style={styles.divider} />
+            <View style={styles.grandTotalRow}>
+              <Text style={styles.grandTotalLabel}>Total</Text>
+              <Text style={styles.grandTotalValue}>${total.toFixed(2)}</Text>
+            </View>
+          </View>
+
+          {/* Contact Information card */}
+          <View style={styles.confirmCard}>
+            <Text style={styles.sectionTitle}>Contact Information</Text>
+            <View style={styles.divider} />
+            <InfoRow label="Name" value={contact.fullName} />
+            <InfoRow label="Email" value={contact.email} />
+            <InfoRow label="Phone" value={contact.phone} />
+            <View style={styles.divider} />
+            <Text style={styles.subSectionTitle}>Shipping Address</Text>
+            <InfoRow label="Address" value={contact.address} />
+            <InfoRow label="City" value={contact.city} />
+            <InfoRow label="State" value={contact.state} />
+            <InfoRow label="ZIP" value={contact.zip} />
+            {contact.note.trim() ? (
+              <>
+                <View style={styles.divider} />
+                <Text style={styles.subSectionTitle}>Order Note</Text>
+                <Text style={styles.noteValue}>{contact.note.trim()}</Text>
+              </>
+            ) : null}
+          </View>
+
+          {/* Disclaimer */}
+          <Text style={styles.disclaimer}>
+            This is a mock order confirmation. No payment has been processed.
           </Text>
-          <Pressable
-            style={styles.continueShoppingBtn}
-            onPress={() => router.push('/')}
-          >
+
+          <Pressable style={styles.continueShoppingBtn} onPress={() => router.push('/')}>
             <Text style={styles.continueShoppingText}>Continue Shopping</Text>
           </Pressable>
-        </View>
+        </ScrollView>
       </SafeAreaView>
     );
   }
@@ -315,6 +451,15 @@ type FormFieldProps = {
   autoCapitalize?: 'none' | 'sentences' | 'words' | 'characters';
   textContentType?: string;
 };
+
+function InfoRow({ label, value }: { label: string; value: string }) {
+  return (
+    <View style={styles.infoRow}>
+      <Text style={styles.infoLabel}>{label}</Text>
+      <Text style={styles.infoValue}>{value}</Text>
+    </View>
+  );
+}
 
 function FormField({
   label,
@@ -590,9 +735,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 32,
     gap: 16,
   },
-  successIconWrap: {
-    marginBottom: 8,
-  },
   successTitle: {
     fontSize: 24,
     fontWeight: '700',
@@ -604,5 +746,79 @@ const styles = StyleSheet.create({
     color: '#666',
     textAlign: 'center',
     lineHeight: 22,
+  },
+
+  confirmHero: {
+    alignItems: 'center',
+    gap: 10,
+    paddingVertical: 8,
+  },
+  orderNumberBadge: {
+    backgroundColor: '#FFF0F5',
+    borderWidth: 1,
+    borderColor: '#F8BBD0',
+    borderRadius: 10,
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    alignItems: 'center',
+    marginTop: 4,
+  },
+  orderNumberLabel: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#999',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+    marginBottom: 2,
+  },
+  orderNumberValue: {
+    fontSize: 16,
+    fontWeight: '800',
+    color: PINK,
+    letterSpacing: 0.5,
+  },
+
+  confirmCard: {
+    backgroundColor: '#fff',
+    borderRadius: 14,
+    padding: 16,
+    shadowColor: '#000',
+    shadowOpacity: 0.04,
+    shadowRadius: 6,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 2,
+    gap: 10,
+  },
+
+  infoRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 8,
+  },
+  infoLabel: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#999',
+    width: 64,
+    flexShrink: 0,
+  },
+  infoValue: {
+    fontSize: 13,
+    color: '#111',
+    flex: 1,
+    flexWrap: 'wrap',
+  },
+  noteValue: {
+    fontSize: 13,
+    color: '#444',
+    lineHeight: 19,
+  },
+
+  disclaimer: {
+    fontSize: 11,
+    color: '#BBB',
+    textAlign: 'center',
+    fontStyle: 'italic',
+    marginTop: -4,
   },
 });
