@@ -37,7 +37,7 @@ function EmptyState() {
 // ── Favorites screen ──────────────────────────────────────────────────────────
 
 export default function FavoritesScreen() {
-  const { favoriteIds } = useFavorites();
+  const { favoriteIds, hydrated } = useFavorites();
   const favoriteProducts = products.filter((p) => favoriteIds.includes(p.id));
 
   return (
@@ -51,7 +51,7 @@ export default function FavoritesScreen() {
       </View>
 
       {favoriteProducts.length === 0 ? (
-        <EmptyState />
+        hydrated ? <EmptyState /> : null
       ) : (
         <ScrollView
           style={styles.scroll}
