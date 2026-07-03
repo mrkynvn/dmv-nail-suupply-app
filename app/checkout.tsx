@@ -19,35 +19,13 @@ import { getProductById } from '../src/data';
 import { generateOrderId, saveOrder } from '../src/orders/storage';
 import { ORDER_STATUS_LABELS } from '../src/orders/types';
 import type { LocalOrder, LocalOrderItem } from '../src/orders/types';
+import {
+  CHECKOUT_PROFILE_KEY,
+  parseCheckoutProfile,
+  type CheckoutProfile,
+} from '../src/checkout/profile';
 
 const PINK = '#D81B60';
-const CHECKOUT_PROFILE_KEY = '@dmv_nail_supply/saved_checkout_details';
-
-// The reusable subset of FormFields that is persisted (note is excluded).
-type CheckoutProfile = {
-  fullName: string;
-  email: string;
-  phone: string;
-  address: string;
-  city: string;
-  state: string;
-  zip: string;
-};
-
-function parseCheckoutProfile(raw: unknown): Partial<CheckoutProfile> {
-  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return {};
-  const obj = raw as Record<string, unknown>;
-  const str = (v: unknown): string => (typeof v === 'string' ? v : '');
-  return {
-    fullName: str(obj.fullName),
-    email: str(obj.email),
-    phone: str(obj.phone),
-    address: str(obj.address),
-    city: str(obj.city),
-    state: str(obj.state),
-    zip: str(obj.zip),
-  };
-}
 
 type FormFields = {
   fullName: string;
