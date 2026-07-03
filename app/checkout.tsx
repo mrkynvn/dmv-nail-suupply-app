@@ -11,11 +11,39 @@ import {
 } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { useRouter } from 'expo-router';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useCart } from '../src/cart/CartContext';
 import { getProductById } from '../src/data';
 
 const PINK = '#D81B60';
+const CHECKOUT_PROFILE_KEY = '@dmv_nail_supply/saved_checkout_details';
+
+// The reusable subset of FormFields that is persisted (note is excluded).
+type CheckoutProfile = {
+  fullName: string;
+  email: string;
+  phone: string;
+  address: string;
+  city: string;
+  state: string;
+  zip: string;
+};
+
+function parseCheckoutProfile(raw: unknown): Partial<CheckoutProfile> {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return {};
+  const obj = raw as Record<string, unknown>;
+  const str = (v: unknown): string => (typeof v === 'string' ? v : '');
+  return {
+    fullName: str(obj.fullName),
+    email: str(obj.email),
+    phone: str(obj.phone),
+    address: str(obj.address),
+    city: str(obj.city),
+    state: str(obj.state),
+    zip: str(obj.zip),
+  };
+}
 
 type FormFields = {
   fullName: string;
@@ -90,6 +118,26 @@ export default function CheckoutScreen() {
   const [errors, setErrors] = useState<FormErrors>({});
   const [submitted, setSubmitted] = useState(false);
   const [orderSnapshot, setOrderSnapshot] = useState<OrderSnapshot | null>(null);
+  const [detailsHydrated, setDetailsHydrated] = useState(false);
+
+  // Restore saved checkout profile on mount. Runs once; never overwrites user
+  // input because form fields are hidden behind detailsHydrated until done.
+  useEffect(() => {
+    (async () => {
+      try {
+        const raw = await AsyncStorage.getItem(CHECKOUT_PROFILE_KEY);
+        if (raw !== null) {
+          const parsed: unknown = JSON.parse(raw);
+          const profile = parseCheckoutProfile(parsed);
+          setForm((prev) => ({ ...prev, ...profile }));
+        }
+      } catch {
+        // Storage read error or malformed JSON — proceed with empty form.
+      } finally {
+        setDetailsHydrated(true);
+      }
+    })();
+  }, []);
 
   function setField(key: keyof FormFields, value: string) {
     setForm((prev) => ({ ...prev, [key]: value }));
@@ -122,6 +170,18 @@ export default function CheckoutScreen() {
       items: snapshotItems,
       total: subtotal,
     };
+    // Persist reusable contact details (note excluded) — fire-and-forget;
+    // write failure must not block cart clearing or confirmation screen.
+    const profileToSave: CheckoutProfile = {
+      fullName: form.fullName,
+      email: form.email,
+      phone: form.phone,
+      address: form.address,
+      city: form.city,
+      state: form.state,
+      zip: form.zip,
+    };
+    AsyncStorage.setItem(CHECKOUT_PROFILE_KEY, JSON.stringify(profileToSave)).catch(() => {});
     setOrderSnapshot(snapshot);
     clearCart();
     setSubmitted(true);
@@ -332,94 +392,100 @@ export default function CheckoutScreen() {
               <View style={styles.formCard}>
                 <Text style={styles.sectionTitle}>Contact Information</Text>
 
-                <FormField
-                  label="Full Name"
-                  value={form.fullName}
-                  onChangeText={(v) => setField('fullName', v)}
-                  error={errors.fullName}
-                  placeholder="Jane Smith"
-                  autoCapitalize="words"
-                  textContentType="name"
-                />
-                <FormField
-                  label="Email"
-                  value={form.email}
-                  onChangeText={(v) => setField('email', v)}
-                  error={errors.email}
-                  placeholder="jane@example.com"
-                  keyboardType="email-address"
-                  autoCapitalize="none"
-                  textContentType="emailAddress"
-                />
-                <FormField
-                  label="Phone"
-                  value={form.phone}
-                  onChangeText={(v) => setField('phone', v)}
-                  error={errors.phone}
-                  placeholder="(555) 555-5555"
-                  keyboardType="phone-pad"
-                  textContentType="telephoneNumber"
-                />
-
-                <View style={styles.formDivider} />
-                <Text style={styles.subSectionTitle}>Shipping Address</Text>
-
-                <FormField
-                  label="Address"
-                  value={form.address}
-                  onChangeText={(v) => setField('address', v)}
-                  error={errors.address}
-                  placeholder="123 Main St"
-                  autoCapitalize="words"
-                  textContentType="streetAddressLine1"
-                />
-                <FormField
-                  label="City"
-                  value={form.city}
-                  onChangeText={(v) => setField('city', v)}
-                  error={errors.city}
-                  placeholder="Washington"
-                  autoCapitalize="words"
-                  textContentType="addressCity"
-                />
-
-                <View style={styles.rowFields}>
-                  <View style={{ flex: 1 }}>
+                {!detailsHydrated ? (
+                  <Text style={styles.formLoadingText}>Restoring saved details…</Text>
+                ) : (
+                  <>
                     <FormField
-                      label="State"
-                      value={form.state}
-                      onChangeText={(v) => setField('state', v)}
-                      error={errors.state}
-                      placeholder="DC"
-                      autoCapitalize="characters"
-                      textContentType="addressState"
+                      label="Full Name"
+                      value={form.fullName}
+                      onChangeText={(v) => setField('fullName', v)}
+                      error={errors.fullName}
+                      placeholder="Jane Smith"
+                      autoCapitalize="words"
+                      textContentType="name"
                     />
-                  </View>
-                  <View style={{ flex: 1 }}>
                     <FormField
-                      label="ZIP Code"
-                      value={form.zip}
-                      onChangeText={(v) => setField('zip', v)}
-                      error={errors.zip}
-                      placeholder="20001"
-                      keyboardType="numeric"
-                      textContentType="postalCode"
+                      label="Email"
+                      value={form.email}
+                      onChangeText={(v) => setField('email', v)}
+                      error={errors.email}
+                      placeholder="jane@example.com"
+                      keyboardType="email-address"
+                      autoCapitalize="none"
+                      textContentType="emailAddress"
                     />
-                  </View>
-                </View>
+                    <FormField
+                      label="Phone"
+                      value={form.phone}
+                      onChangeText={(v) => setField('phone', v)}
+                      error={errors.phone}
+                      placeholder="(555) 555-5555"
+                      keyboardType="phone-pad"
+                      textContentType="telephoneNumber"
+                    />
 
-                <View style={styles.formDivider} />
-                <Text style={styles.subSectionTitle}>Order Note (optional)</Text>
-                <TextInput
-                  style={[styles.input, styles.noteInput]}
-                  value={form.note}
-                  onChangeText={(v) => setField('note', v)}
-                  placeholder="Any special instructions..."
-                  placeholderTextColor="#BBB"
-                  multiline
-                  numberOfLines={3}
-                  textAlignVertical="top"
-                />
+                    <View style={styles.formDivider} />
+                    <Text style={styles.subSectionTitle}>Shipping Address</Text>
+
+                    <FormField
+                      label="Address"
+                      value={form.address}
+                      onChangeText={(v) => setField('address', v)}
+                      error={errors.address}
+                      placeholder="123 Main St"
+                      autoCapitalize="words"
+                      textContentType="streetAddressLine1"
+                    />
+                    <FormField
+                      label="City"
+                      value={form.city}
+                      onChangeText={(v) => setField('city', v)}
+                      error={errors.city}
+                      placeholder="Washington"
+                      autoCapitalize="words"
+                      textContentType="addressCity"
+                    />
+
+                    <View style={styles.rowFields}>
+                      <View style={{ flex: 1 }}>
+                        <FormField
+                          label="State"
+                          value={form.state}
+                          onChangeText={(v) => setField('state', v)}
+                          error={errors.state}
+                          placeholder="DC"
+                          autoCapitalize="characters"
+                          textContentType="addressState"
+                        />
+                      </View>
+                      <View style={{ flex: 1 }}>
+                        <FormField
+                          label="ZIP Code"
+                          value={form.zip}
+                          onChangeText={(v) => setField('zip', v)}
+                          error={errors.zip}
+                          placeholder="20001"
+                          keyboardType="numeric"
+                          textContentType="postalCode"
+                        />
+                      </View>
+                    </View>
+
+                    <View style={styles.formDivider} />
+                    <Text style={styles.subSectionTitle}>Order Note (optional)</Text>
+                    <TextInput
+                      style={[styles.input, styles.noteInput]}
+                      value={form.note}
+                      onChangeText={(v) => setField('note', v)}
+                      placeholder="Any special instructions..."
+                      placeholderTextColor="#BBB"
+                      multiline
+                      numberOfLines={3}
+                      textAlignVertical="top"
+                    />
+                  </>
+                )}
               </View>
 
               {/* Place Order */}
@@ -820,5 +886,12 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     fontStyle: 'italic',
     marginTop: -4,
+  },
+
+  formLoadingText: {
+    fontSize: 13,
+    color: '#BBBBBB',
+    fontStyle: 'italic',
+    paddingVertical: 8,
   },
 });
