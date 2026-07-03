@@ -8,13 +8,17 @@ import {
   TextInput,
   KeyboardAvoidingView,
   Platform,
+  ActivityIndicator,
 } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { useRouter } from 'expo-router';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useCart } from '../src/cart/CartContext';
 import { getProductById } from '../src/data';
+import { generateOrderId, saveOrder } from '../src/orders/storage';
+import { ORDER_STATUS_LABELS } from '../src/orders/types';
+import type { LocalOrder, LocalOrderItem } from '../src/orders/types';
 
 const PINK = '#D81B60';
 const CHECKOUT_PROFILE_KEY = '@dmv_nail_supply/saved_checkout_details';
@@ -57,22 +61,6 @@ type FormFields = {
 };
 
 type FormErrors = Partial<Record<keyof FormFields, string>>;
-
-type OrderItem = {
-  productId: string;
-  name: string;
-  brand: string;
-  quantity: number;
-  unitPrice: number;
-  lineTotal: number;
-};
-
-type OrderSnapshot = {
-  orderNumber: string;
-  contact: FormFields;
-  items: OrderItem[];
-  total: number;
-};
 
 function generateOrderNumber(): string {
   const now = new Date();
@@ -117,8 +105,14 @@ export default function CheckoutScreen() {
   const [form, setForm] = useState<FormFields>(EMPTY_FORM);
   const [errors, setErrors] = useState<FormErrors>({});
   const [submitted, setSubmitted] = useState(false);
-  const [orderSnapshot, setOrderSnapshot] = useState<OrderSnapshot | null>(null);
+  const [orderSnapshot, setOrderSnapshot] = useState<LocalOrder | null>(null);
   const [detailsHydrated, setDetailsHydrated] = useState(false);
+
+  // Synchronous re-entrancy lock — the real guard against duplicate submits.
+  // `submitting` state is used only for disabled/loading UI.
+  const isSubmittingRef = useRef(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
 
   // Restore saved checkout profile on mount. Runs once; never overwrites user
   // input because form fields are hidden behind detailsHydrated until done.
@@ -144,17 +138,23 @@ export default function CheckoutScreen() {
     if (errors[key]) setErrors((prev) => ({ ...prev, [key]: undefined }));
   }
 
-  function handlePlaceOrder() {
+  async function handlePlaceOrder() {
+    // 1. Synchronous re-entrancy guard — before any work.
+    if (isSubmittingRef.current) return;
+
+    // 2. Validate the form. Lock not yet taken, so a plain return is safe.
     const validationErrors = validateForm(form);
     if (Object.keys(validationErrors).length > 0) {
       setErrors(validationErrors);
       return;
     }
-    const snapshotItems: OrderItem[] = items
+
+    // 3. Resolve cart products and build immutable line snapshots synchronously.
+    const snapshotItems: LocalOrderItem[] = items
       .map((item) => {
         const product = getProductById(item.productId);
         if (!product) return null;
-        return {
+        const line: LocalOrderItem = {
           productId: item.productId,
           name: product.name,
           brand: product.brand ?? '',
@@ -162,16 +162,55 @@ export default function CheckoutScreen() {
           unitPrice: product.price,
           lineTotal: product.price * item.quantity,
         };
+        if (typeof product.originalPrice === 'number') line.originalPrice = product.originalPrice;
+        if (typeof product.isOnSale === 'boolean') line.isOnSale = product.isOnSale;
+        return line;
       })
-      .filter((x): x is OrderItem => x !== null);
-    const snapshot: OrderSnapshot = {
+      .filter((x): x is LocalOrderItem => x !== null);
+
+    // 4. Empty/stale cart guard — no lock, no persistence, no cart clearing.
+    if (snapshotItems.length === 0) {
+      setSubmitError(
+        'We couldn’t finalize your cart. Please review your items and try again.',
+      );
+      return;
+    }
+
+    // 5. Take the lock before the first awaited operation.
+    isSubmittingRef.current = true;
+    // 6. Visual submitting state; clear any prior error.
+    setSubmitting(true);
+    setSubmitError(null);
+
+    // 7. Build the LocalOrder draft exactly once.
+    const orderSubtotal = snapshotItems.reduce((sum, i) => sum + i.lineTotal, 0);
+    const draft: LocalOrder = {
+      id: generateOrderId(),
       orderNumber: generateOrderNumber(),
+      createdAt: new Date().toISOString(),
+      status: 'ORDER_RECEIVED',
+      currency: 'USD',
       contact: { ...form },
       items: snapshotItems,
-      total: subtotal,
+      subtotal: orderSubtotal,
+      total: orderSubtotal,
     };
-    // Persist reusable contact details (note excluded) — fire-and-forget;
-    // write failure must not block cart clearing or confirmation screen.
+
+    // 8. Persist the order.
+    let persisted: LocalOrder;
+    try {
+      persisted = await saveOrder(draft);
+    } catch {
+      // 9. Save failure — retain cart and form, show recoverable error,
+      // reset submitting state, release the lock, do not confirm.
+      setSubmitError('We couldn’t save your order. Please try again.');
+      setSubmitting(false);
+      isSubmittingRef.current = false;
+      return;
+    }
+
+    // 10. Save success. Persist reusable contact details (note excluded) —
+    // fire-and-forget; write failure must not block confirmation. (M25, unchanged.)
     const profileToSave: CheckoutProfile = {
       fullName: form.fullName,
       email: form.email,
@@ -182,9 +221,13 @@ export default function CheckoutScreen() {
       zip: form.zip,
     };
     AsyncStorage.setItem(CHECKOUT_PROFILE_KEY, JSON.stringify(profileToSave)).catch(() => {});
-    setOrderSnapshot(snapshot);
+
+    // Use the returned persisted order (its id may have been regenerated).
+    setOrderSnapshot(persisted);
     clearCart();
     setSubmitted(true);
+    // Intentionally leave isSubmittingRef locked: the form transitions to the
+    // confirmation view and must not accept another submit.
   }
 
   if (submitted) {
@@ -210,7 +253,7 @@ export default function CheckoutScreen() {
       );
     }
 
-    const { orderNumber, contact, items: snapItems, total } = orderSnapshot;
+    const { orderNumber, status, contact, items: snapItems, total } = orderSnapshot;
 
     return (
       <SafeAreaView style={styles.safeArea}>
@@ -234,6 +277,9 @@ export default function CheckoutScreen() {
             <View style={styles.orderNumberBadge}>
               <Text style={styles.orderNumberLabel}>Order Number</Text>
               <Text style={styles.orderNumberValue}>{orderNumber}</Text>
+            </View>
+            <View style={styles.statusChip}>
+              <Text style={styles.statusChipText}>{ORDER_STATUS_LABELS[status]}</Text>
             </View>
           </View>
 
@@ -489,15 +535,28 @@ export default function CheckoutScreen() {
               </View>
 
               {/* Place Order */}
+              {submitError ? (
+                <View style={styles.submitErrorBox}>
+                  <Ionicons name="alert-circle" size={18} color={PINK} />
+                  <Text style={styles.submitErrorText}>{submitError}</Text>
+                </View>
+              ) : null}
               <Pressable
                 style={[
                   styles.placeOrderBtn,
-                  items.length === 0 && styles.placeOrderBtnDisabled,
+                  (items.length === 0 || submitting) && styles.placeOrderBtnDisabled,
                 ]}
                 onPress={handlePlaceOrder}
-                disabled={items.length === 0}
+                disabled={items.length === 0 || submitting}
               >
-                <Text style={styles.placeOrderText}>Place Order</Text>
+                {submitting ? (
+                  <View style={styles.placeOrderLoading}>
+                    <ActivityIndicator size="small" color="#fff" />
+                    <Text style={styles.placeOrderText}>Placing Order…</Text>
+                  </View>
+                ) : (
+                  <Text style={styles.placeOrderText}>Place Order</Text>
+                )}
               </Pressable>
             </>
           )}
@@ -792,6 +851,40 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontWeight: '700',
     fontSize: 16,
+  },
+  placeOrderLoading: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  submitErrorBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: '#FFF5F8',
+    borderWidth: 1,
+    borderColor: '#F8BBD0',
+    borderRadius: 10,
+    padding: 12,
+  },
+  submitErrorText: {
+    flex: 1,
+    fontSize: 13,
+    color: PINK,
+    fontWeight: '500',
+  },
+  statusChip: {
+    backgroundColor: '#FFF0F5',
+    borderRadius: 999,
+    paddingHorizontal: 14,
+    paddingVertical: 5,
+    marginTop: 8,
+  },
+  statusChipText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: PINK,
+    letterSpacing: 0.3,
   },
 
   successContainer: {
