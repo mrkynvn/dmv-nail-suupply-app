@@ -255,6 +255,13 @@ export default function CheckoutScreen() {
 
     const { orderNumber, status, contact, items: snapItems, total } = orderSnapshot;
 
+    // Route strictly by the opaque persisted id, never the display orderNumber.
+    // Reject empty/whitespace ids so we never build an /orders/undefined route.
+    const orderId =
+      typeof orderSnapshot.id === 'string' && orderSnapshot.id.trim().length > 0
+        ? orderSnapshot.id
+        : null;
+
     return (
       <SafeAreaView style={styles.safeArea}>
         <View style={styles.header}>
@@ -340,6 +347,15 @@ export default function CheckoutScreen() {
           <Text style={styles.disclaimer}>
             This is a mock order confirmation. No payment has been processed.
           </Text>
+
+          {orderId ? (
+            <Pressable
+              style={styles.viewOrderBtn}
+              onPress={() => router.replace(`/orders/${orderId}`)}
+            >
+              <Text style={styles.viewOrderText}>View Order</Text>
+            </Pressable>
+          ) : null}
 
           <Pressable style={styles.continueShoppingBtn} onPress={() => router.push('/')}>
             <Text style={styles.continueShoppingText}>Continue Shopping</Text>
@@ -668,6 +684,18 @@ const styles = StyleSheet.create({
     paddingHorizontal: 28,
   },
   backToCartText: {
+    color: '#fff',
+    fontWeight: '700',
+    fontSize: 15,
+  },
+  viewOrderBtn: {
+    backgroundColor: PINK,
+    borderRadius: 12,
+    paddingVertical: 12,
+    paddingHorizontal: 28,
+    alignItems: 'center',
+  },
+  viewOrderText: {
     color: '#fff',
     fontWeight: '700',
     fontSize: 15,
