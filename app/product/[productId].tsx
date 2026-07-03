@@ -12,16 +12,26 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 import { categories, getProductById } from '../../src/data';
 import { useCart } from '../../src/cart/CartContext';
 import { useFavorites } from '../../src/favorites/FavoritesContext';
+import { useRecentlyViewed } from '../../src/recentlyViewed/RecentlyViewedContext';
 
 export default function ProductDetailScreen() {
   const { productId } = useLocalSearchParams<{ productId: string }>();
   const product = getProductById(productId);
   const { addToCart, getItemQuantity } = useCart();
   const { isFavorite, toggleFavorite } = useFavorites();
+  const { recordRecentlyViewed } = useRecentlyViewed();
 
   const [qty, setQty] = useState(1);
   const [showConfirm, setShowConfirm] = useState(false);
   const confirmTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Record this product view once when a valid product is opened.
+  useEffect(() => {
+    if (typeof productId === 'string' && productId.length > 0 && product) {
+      recordRecentlyViewed(productId);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [productId]);
 
   useEffect(() => {
     return () => {

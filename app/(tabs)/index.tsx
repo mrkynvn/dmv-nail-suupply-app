@@ -9,9 +9,10 @@ import {
   Pressable,
 } from 'react-native';
 import { router } from 'expo-router';
-import { categories, getFeaturedProducts, getOnSaleProducts } from '../../src/data';
+import { categories, getFeaturedProducts, getOnSaleProducts, getProductById } from '../../src/data';
 import { Product, Category } from '../../src/data';
 import { ProductCard } from '../../components/products/ProductCard';
+import { useRecentlyViewed } from '../../src/recentlyViewed/RecentlyViewedContext';
 
 const DMV_LOGO = require('../../assets/images/dmv-logo.png');
 
@@ -77,6 +78,11 @@ export default function HomeScreen() {
   const [showAllCategories, setShowAllCategories] = useState(false);
   const visibleCategories = showAllCategories ? categories : categories.slice(0, 4);
 
+  const { recentProductIds, hydrated } = useRecentlyViewed();
+  const recentProducts = recentProductIds
+    .map((id) => getProductById(id))
+    .filter((p): p is Product => p != null);
+
   return (
     <SafeAreaView style={styles.safeArea}>
       <ScrollView
@@ -126,6 +132,11 @@ export default function HomeScreen() {
           products={saleProducts}
           onSeeAll={() => router.push('/promotions')}
         />
+
+        {/* Recently viewed — only shown after hydration when history exists */}
+        {hydrated && recentProducts.length > 0 && (
+          <ProductSection title="Recently Viewed" products={recentProducts} />
+        )}
       </ScrollView>
     </SafeAreaView>
   );
