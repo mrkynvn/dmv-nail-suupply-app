@@ -6,12 +6,14 @@ import {
   Pressable,
   ScrollView,
   ActivityIndicator,
+  Alert,
 } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { useCallback, useRef, useState } from 'react';
 import {
   loadCheckoutProfile,
+  clearCheckoutProfile,
   type CheckoutProfile,
   type LoadCheckoutProfileResult,
 } from '../../src/checkout/profile';
@@ -51,7 +53,14 @@ export default function AccountScreen() {
   });
   const [orderCount, setOrderCount] = useState<OrderCountState>({ count: null });
 
+  // Clear-saved-details management state. `clearError` drives a soft inline
+  // warning; a removal failure never asserts the underlying storage is gone.
+  const [clearing, setClearing] = useState(false);
+  const [clearError, setClearError] = useState(false);
+
   const activeRef = useRef(true);
+  // Synchronous guard against a duplicate clear while removal is in flight.
+  const clearingRef = useRef(false);
 
   const applyProfileResult = useCallback((result: LoadCheckoutProfileResult) => {
     setProfileState((prev) => {
@@ -105,6 +114,41 @@ export default function AccountScreen() {
     setProfileState((prev) => ({ ...prev, loading: true, error: null }));
     refresh();
   }, [refresh]);
+
+  // Remove the saved checkout profile, then reuse the standard refresh path so
+  // the card settles into its existing "No saved details yet" empty state. Only
+  // the profile key is touched; order history is a separate key and untouched.
+  const onClearConfirmed = useCallback(() => {
+    if (clearingRef.current) return; // duplicate-tap guard
+    clearingRef.current = true;
+    setClearing(true);
+    setClearError(false);
+
+    clearCheckoutProfile()
+      .then(() => {
+        if (activeRef.current) refresh();
+      })
+      .catch(() => {
+        // I/O failure: keep the displayed details, surface a soft warning, and
+        // make no claim about the actual stored bytes.
+        if (activeRef.current) setClearError(true);
+      })
+      .finally(() => {
+        clearingRef.current = false;
+        if (activeRef.current) setClearing(false);
+      });
+  }, [refresh]);
+
+  const onPressClear = useCallback(() => {
+    Alert.alert(
+      'Clear saved details?',
+      'This will remove your saved checkout details from this device.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Clear', style: 'destructive', onPress: onClearConfirmed },
+      ],
+    );
+  }, [onClearConfirmed]);
 
   const { loading, profile, error, loaded } = profileState;
   const showInitialLoading = loading && !loaded;
@@ -167,6 +211,27 @@ export default function AccountScreen() {
                 <Text style={styles.detailValue}>{profile.email}</Text>
               </View>
               <Text style={styles.detailNote}>Saved from your last checkout.</Text>
+
+              {clearError ? (
+                <View style={styles.refreshWarning}>
+                  <Ionicons name="alert-circle-outline" size={15} color={PINK} />
+                  <Text style={styles.refreshWarningText}>
+                    Couldn’t clear your saved details. Please try again.
+                  </Text>
+                </View>
+              ) : null}
+
+              <Pressable
+                style={[styles.clearBtn, clearing && styles.clearBtnDisabled]}
+                onPress={onPressClear}
+                disabled={clearing}
+              >
+                {clearing ? (
+                  <ActivityIndicator size="small" color={PINK} />
+                ) : (
+                  <Text style={styles.clearBtnText}>Clear Saved Details</Text>
+                )}
+              </Pressable>
             </>
           ) : (
             <View style={styles.stateBlock}>
@@ -356,6 +421,26 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: '#AAA',
     fontStyle: 'italic',
+  },
+
+  clearBtn: {
+    alignSelf: 'flex-start',
+    borderWidth: 1,
+    borderColor: '#F8BBD0',
+    borderRadius: 10,
+    paddingVertical: 9,
+    paddingHorizontal: 18,
+    marginTop: 4,
+    minHeight: 38,
+    justifyContent: 'center',
+  },
+  clearBtnDisabled: {
+    opacity: 0.6,
+  },
+  clearBtnText: {
+    color: PINK,
+    fontWeight: '700',
+    fontSize: 14,
   },
 
   menuCard: {

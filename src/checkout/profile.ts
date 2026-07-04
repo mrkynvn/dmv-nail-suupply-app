@@ -6,7 +6,8 @@
 //   - loadCheckoutProfile: STRICT. Used by the guest Account screen to decide
 //     between "no saved details", "corrupt data", and a real storage failure.
 //
-// Neither reader ever writes, repairs, clears, or normalizes stored bytes.
+// Neither reader ever writes, repairs, or normalizes stored bytes. The only
+// writer in this module is clearCheckoutProfile, which removes the key outright.
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
@@ -103,4 +104,13 @@ export async function loadCheckoutProfile(): Promise<LoadCheckoutProfileResult> 
   const profile = validateProfile(parsed);
   if (!profile) return { ok: false, reason: 'corrupt' };
   return { ok: true, profile };
+}
+
+// The single write in this module: remove the saved checkout profile outright.
+// Centralizes key access so callers never touch the raw storage key. A getItem
+// removal failure propagates so callers can keep showing last-known-good data
+// rather than assuming the bytes are gone. Order history uses a separate key and
+// is never affected.
+export async function clearCheckoutProfile(): Promise<void> {
+  await AsyncStorage.removeItem(CHECKOUT_PROFILE_KEY);
 }
