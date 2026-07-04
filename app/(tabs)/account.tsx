@@ -18,6 +18,7 @@ import {
   type LoadCheckoutProfileResult,
 } from '../../src/checkout/profile';
 import { loadOrders } from '../../src/orders/storage';
+import { useAuth } from '../../src/auth/AuthContext';
 
 const PINK = '#D81B60';
 
@@ -44,6 +45,12 @@ function orderSubtitle(count: number | null): string {
 
 export default function AccountScreen() {
   const router = useRouter();
+
+  // Bind the Account screen to the auth boundary. This subscribes to auth
+  // context and enforces that an AuthProvider is present. M31 is guest-first, so
+  // the screen renders the established guest experience below; a later milestone
+  // will introduce the authenticated Account view.
+  useAuth();
 
   const [profileState, setProfileState] = useState<ProfileState>({
     loading: true,
