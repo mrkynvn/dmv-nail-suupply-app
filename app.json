@@ -27,6 +27,12 @@
     "plugins": [
       "expo-router",
       "expo-asset"
-    ]
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "74801f57-3d2e-4da0-848e-4da6008bb4d3"
+      }
+    },
+    "owner": "mrkynvns-team"
   }
 }
