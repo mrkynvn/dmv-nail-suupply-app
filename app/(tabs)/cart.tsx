@@ -54,11 +54,23 @@ function CartItemRow({
         <View style={styles.itemBottom}>
           {/* Quantity controls */}
           <View style={styles.qtyRow}>
-            <Pressable style={styles.qtyBtn} onPress={onDecrement}>
+            <Pressable
+              style={styles.qtyBtn}
+              onPress={onDecrement}
+              hitSlop={12}
+              accessibilityRole="button"
+              accessibilityLabel={`Decrease quantity for ${product.name}`}
+            >
               <Ionicons name="remove" size={16} color={PINK} />
             </Pressable>
             <Text style={styles.qtyText}>{item.quantity}</Text>
-            <Pressable style={styles.qtyBtn} onPress={onIncrement}>
+            <Pressable
+              style={styles.qtyBtn}
+              onPress={onIncrement}
+              hitSlop={12}
+              accessibilityRole="button"
+              accessibilityLabel={`Increase quantity for ${product.name}`}
+            >
               <Ionicons name="add" size={16} color={PINK} />
             </Pressable>
           </View>
@@ -68,7 +80,13 @@ function CartItemRow({
       </View>
 
       {/* Remove */}
-      <Pressable style={styles.removeBtn} onPress={onRemove} hitSlop={8}>
+      <Pressable
+        style={styles.removeBtn}
+        onPress={onRemove}
+        hitSlop={12}
+        accessibilityRole="button"
+        accessibilityLabel={`Remove ${product.name} from cart`}
+      >
         <Ionicons name="close-circle" size={20} color="#BBBBBB" />
       </Pressable>
     </View>

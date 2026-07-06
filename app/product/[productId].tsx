@@ -67,13 +67,28 @@ export default function ProductDetailScreen() {
     <SafeAreaView style={styles.safeArea}>
       {/* Header */}
       <View style={styles.header}>
-        <Pressable style={styles.backBtn} onPress={() => router.back()}>
+        <Pressable
+          style={styles.backBtn}
+          onPress={() => router.back()}
+          accessibilityRole="button"
+          accessibilityLabel="Go back"
+        >
           <Ionicons name="chevron-back" size={24} color={PINK} />
         </Pressable>
         <Text style={styles.headerTitle} numberOfLines={1}>
           {product.name}
         </Text>
-        <Pressable style={styles.heartBtn} onPress={() => toggleFavorite(product.id)}>
+        <Pressable
+          style={styles.heartBtn}
+          onPress={() => toggleFavorite(product.id)}
+          accessibilityRole="button"
+          accessibilityLabel={
+            isFavorite(product.id)
+              ? `Remove ${product.name} from favorites`
+              : `Add ${product.name} to favorites`
+          }
+          accessibilityState={{ selected: isFavorite(product.id) }}
+        >
           <Ionicons
             name={isFavorite(product.id) ? 'heart' : 'heart-outline'}
             size={24}
@@ -175,6 +190,9 @@ export default function ProductDetailScreen() {
             onPress={() => setQty((q) => Math.max(1, q - 1))}
             disabled={qty <= 1 || outOfStock}
             hitSlop={8}
+            accessibilityRole="button"
+            accessibilityLabel="Decrease quantity"
+            accessibilityState={{ disabled: qty <= 1 || outOfStock }}
           >
             <Text style={[styles.qtyBtnText, (qty <= 1 || outOfStock) && styles.qtyBtnTextDisabled]}>
               −
@@ -186,6 +204,9 @@ export default function ProductDetailScreen() {
             onPress={() => setQty((q) => q + 1)}
             disabled={outOfStock}
             hitSlop={8}
+            accessibilityRole="button"
+            accessibilityLabel="Increase quantity"
+            accessibilityState={{ disabled: outOfStock }}
           >
             <Text style={[styles.qtyBtnText, outOfStock && styles.qtyBtnTextDisabled]}>
               +
@@ -198,6 +219,8 @@ export default function ProductDetailScreen() {
           style={[styles.cartButton, outOfStock && styles.cartButtonDisabled]}
           disabled={outOfStock}
           onPress={handleAddToCart}
+          accessibilityRole="button"
+          accessibilityState={{ disabled: outOfStock }}
         >
           <Text style={styles.cartButtonText}>
             {outOfStock ? 'Out of Stock' : 'Add to Cart'}

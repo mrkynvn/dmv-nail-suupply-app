@@ -64,6 +64,13 @@ export function ProductCard({
             style={styles.heartBtn}
             onPress={() => toggleFavorite(product.id)}
             hitSlop={8}
+            accessibilityRole="button"
+            accessibilityLabel={
+              favorited
+                ? `Remove ${product.name} from favorites`
+                : `Add ${product.name} to favorites`
+            }
+            accessibilityState={{ selected: favorited }}
           >
             <Ionicons
               name={favorited ? 'heart' : 'heart-outline'}
@@ -99,6 +106,9 @@ export function ProductCard({
               onPress={() => addToCart(product.id)}
               disabled={outOfStock}
               hitSlop={6}
+              accessibilityRole="button"
+              accessibilityLabel={`Add ${product.name} to cart`}
+              accessibilityState={{ disabled: outOfStock }}
             >
               {outOfStock ? (
                 <Text style={styles.addBtnOosText}>Out</Text>
