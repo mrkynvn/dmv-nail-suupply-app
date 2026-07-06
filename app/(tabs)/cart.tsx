@@ -158,8 +158,11 @@ export default function CartScreen() {
               </View>
             )}
             <Pressable style={styles.checkoutBtn} onPress={handleCheckout}>
-              <Text style={styles.checkoutBtnText}>Proceed to Checkout</Text>
+              <Text style={styles.checkoutBtnText}>Review Selection</Text>
             </Pressable>
+            <Text style={styles.reviewNote}>
+              This app is a product catalogue. Review your selected items below.
+            </Text>
           </View>
         </>
       )}
@@ -376,5 +379,11 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontWeight: '700',
     fontSize: 16,
+  },
+  reviewNote: {
+    fontSize: 11,
+    color: '#AAA',
+    textAlign: 'center',
+    lineHeight: 16,
   },
 });

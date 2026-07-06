@@ -9,7 +9,7 @@ import {
   Alert,
 } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
-import { useRouter, useFocusEffect } from 'expo-router';
+import { useFocusEffect } from 'expo-router';
 import { useCallback, useRef, useState } from 'react';
 import {
   loadCheckoutProfile,
@@ -17,7 +17,6 @@ import {
   type CheckoutProfile,
   type LoadCheckoutProfileResult,
 } from '../../src/checkout/profile';
-import { loadOrders } from '../../src/orders/storage';
 import { useAuth } from '../../src/auth/AuthContext';
 
 const PINK = '#D81B60';
@@ -30,22 +29,7 @@ type ProfileState = {
   loaded: boolean; // a successful load has settled at least once
 };
 
-// Order-count UI state. Only a successful load produces a count; any failure
-// (or in-flight) leaves count null and the row falls back to neutral copy.
-type OrderCountState = {
-  count: number | null;
-};
-
-function orderSubtitle(count: number | null): string {
-  if (count === null) return 'View your order history';
-  if (count === 0) return 'No orders yet';
-  if (count === 1) return '1 order saved on this device';
-  return `${count} orders saved on this device`;
-}
-
 export default function AccountScreen() {
-  const router = useRouter();
-
   // Bind the Account screen to the auth boundary. This subscribes to auth
   // context and enforces that an AuthProvider is present. M31 is guest-first, so
   // the screen renders the established guest experience below; a later milestone
@@ -58,7 +42,6 @@ export default function AccountScreen() {
     error: null,
     loaded: false,
   });
-  const [orderCount, setOrderCount] = useState<OrderCountState>({ count: null });
 
   // Clear-saved-details management state. `clearError` drives a soft inline
   // warning; a removal failure never asserts the underlying storage is gone.
@@ -84,7 +67,7 @@ export default function AccountScreen() {
     setProfileState((prev) => ({ ...prev, loading: false, error: 'storage' }));
   }, []);
 
-  // Read profile + order count together. Reused by focus-refresh and Try Again.
+  // Read the saved checkout profile. Reused by focus-refresh and Try Again.
   const refresh = useCallback(() => {
     loadCheckoutProfile()
       .then((result) => {
@@ -92,18 +75,6 @@ export default function AccountScreen() {
       })
       .catch(() => {
         if (activeRef.current) applyProfileFailure();
-      });
-
-    // Order count is a soft enhancement: only a successful load sets a count;
-    // any failure leaves the previous count (or null) so the row degrades to
-    // neutral copy rather than a misleading zero.
-    loadOrders()
-      .then((result) => {
-        if (!activeRef.current) return;
-        if (result.ok) setOrderCount({ count: result.orders.length });
-      })
-      .catch(() => {
-        /* Neutral fallback; never surface an order error on Account. */
       });
   }, [applyProfileResult, applyProfileFailure]);
 
@@ -182,9 +153,13 @@ export default function AccountScreen() {
           </View>
         </View>
 
-        {/* Saved checkout details */}
+        {/* Saved local details */}
         <View style={styles.sectionCard}>
-          <Text style={styles.sectionTitle}>Your Checkout Details</Text>
+          <Text style={styles.sectionTitle}>Saved local details</Text>
+          <Text style={styles.sectionExplanation}>
+            These details are stored only on this device and are no longer used
+            to place orders.
+          </Text>
           <View style={styles.divider} />
 
           {showInitialLoading ? (
@@ -217,7 +192,7 @@ export default function AccountScreen() {
                 <Text style={styles.detailLabel}>Email</Text>
                 <Text style={styles.detailValue}>{profile.email}</Text>
               </View>
-              <Text style={styles.detailNote}>Saved from your last checkout.</Text>
+              <Text style={styles.detailNote}>Stored only on this device.</Text>
 
               {clearError ? (
                 <View style={styles.refreshWarning}>
@@ -242,35 +217,17 @@ export default function AccountScreen() {
             </>
           ) : (
             <View style={styles.stateBlock}>
-              <Text style={styles.stateTitle}>No saved details yet</Text>
+              <Text style={styles.stateTitle}>No saved details</Text>
               <Text style={styles.stateMessage}>
-                Your details will appear here after your first checkout.
+                There are no saved details on this device.
               </Text>
             </View>
           )}
         </View>
 
-        {/* My Orders */}
-        <View style={styles.menuCard}>
-          <Pressable
-            style={styles.menuRow}
-            onPress={() => router.push('/orders')}
-            android_ripple={{ color: '#F0F0F0' }}
-          >
-            <View style={styles.menuIcon}>
-              <Ionicons name="receipt-outline" size={20} color={PINK} />
-            </View>
-            <View style={styles.menuTextWrap}>
-              <Text style={styles.menuLabel}>My Orders</Text>
-              <Text style={styles.menuSub}>{orderSubtitle(orderCount.count)}</Text>
-            </View>
-            <Ionicons name="chevron-forward" size={20} color="#CCC" />
-          </Pressable>
-        </View>
-
         {/* Local transparency footer */}
         <Text style={styles.footerNote}>
-          You're browsing as a guest. Your saved checkout details and orders stay on this device.
+          You're browsing as a guest. Any saved details stay only on this device.
         </Text>
       </ScrollView>
     </SafeAreaView>
@@ -350,6 +307,11 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '700',
     color: '#111',
+  },
+  sectionExplanation: {
+    fontSize: 13,
+    color: '#777',
+    lineHeight: 19,
   },
   divider: {
     height: 1,
@@ -448,45 +410,6 @@ const styles = StyleSheet.create({
     color: PINK,
     fontWeight: '700',
     fontSize: 14,
-  },
-
-  menuCard: {
-    backgroundColor: '#fff',
-    borderRadius: 14,
-    overflow: 'hidden',
-    shadowColor: '#000',
-    shadowOpacity: 0.04,
-    shadowRadius: 6,
-    shadowOffset: { width: 0, height: 2 },
-    elevation: 2,
-  },
-  menuRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 14,
-    paddingHorizontal: 16,
-    paddingVertical: 16,
-  },
-  menuIcon: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: '#FFF0F5',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  menuTextWrap: {
-    flex: 1,
-    gap: 2,
-  },
-  menuLabel: {
-    fontSize: 15,
-    fontWeight: '600',
-    color: '#111',
-  },
-  menuSub: {
-    fontSize: 12,
-    color: '#999',
   },
 
   footerNote: {
