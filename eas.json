@@ -1,4 +1,7 @@
 {
+  "cli": {
+    "appVersionSource": "remote"
+  },
   "build": {
     "development": {
       "developmentClient": true,
@@ -6,6 +9,10 @@
       "ios": {
         "simulator": true
       }
+    },
+    "production": {
+      "distribution": "store",
+      "autoIncrement": true
     }
   }
 }
