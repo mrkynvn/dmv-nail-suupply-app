@@ -57,15 +57,18 @@ export function EmptyState({
 }
 
 // FlatList footer for cursor pagination (M41S2C1). Shows a spinner while the
-// next page loads, or a retry row if the last page-load failed. Renders nothing
-// when idle (including when the list is exhausted).
+// next page loads, or a retry row if the last page-load failed. While idle with
+// more pages remaining it reserves the spinner's height so the idle→loading
+// transition doesn't shift the list; once exhausted it renders nothing.
 export function LoadMoreFooter({
   loadingMore,
   pageError,
+  hasMore,
   onRetry,
 }: {
   loadingMore: boolean;
   pageError?: string | null;
+  hasMore?: boolean;
   onRetry?: () => void;
 }) {
   if (pageError) {
@@ -91,6 +94,9 @@ export function LoadMoreFooter({
         <ActivityIndicator color={PINK} accessibilityLabel="Loading more products" />
       </View>
     );
+  }
+  if (hasMore) {
+    return <View style={styles.footer} />;
   }
   return null;
 }
@@ -126,11 +132,13 @@ const styles = StyleSheet.create({
     fontSize: 14,
   },
 
-  // Load-more footer
+  // Load-more footer. minHeight matches the spinner state so the idle
+  // placeholder and the loading spinner occupy the same space (no jump).
   footer: {
     alignItems: 'center',
     justifyContent: 'center',
     paddingVertical: 20,
+    minHeight: 60,
     gap: 10,
   },
   footerError: {

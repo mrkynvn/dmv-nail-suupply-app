@@ -66,6 +66,7 @@ export default function CategoryScreen() {
     error,
     loadingMore,
     pageError,
+    hasMore,
     reload,
     loadMore,
     retryLoadMore,
@@ -87,6 +88,12 @@ export default function CategoryScreen() {
   const columns = productGridColumns(width);
   const itemWidth = gridItemWidth(width, columns, SCREEN_PADDING, GRID_GAP);
   const count = items.length;
+  const sortIsDefault = sort === 'featured';
+  // Count line doubles as the active-sort readout so the applied order is
+  // visible without opening the sheet. Default order shows the count alone.
+  const countLine = sortIsDefault
+    ? `Showing ${count} ${count === 1 ? 'product' : 'products'}`
+    : `${count} ${count === 1 ? 'product' : 'products'} · ${COLLECTION_SORT_LABELS[sort]}`;
   // Prefer the route title param, then the real fetched collection title, then a
   // prettified handle fallback (e.g. a deep link with no title param).
   const headerTitle =
@@ -99,6 +106,8 @@ export default function CategoryScreen() {
         <Pressable
           style={styles.backBtn}
           onPress={() => router.back()}
+          // Icon is visually small; extend the touch target toward 44pt.
+          hitSlop={10}
           accessibilityRole="button"
           accessibilityLabel="Go back"
         >
@@ -111,14 +120,20 @@ export default function CategoryScreen() {
           {!loading && !error && count > 0 && (
             // Reflects only what is loaded so far — Storefront does not return a
             // reliable total here, so we never imply this is the whole collection.
-            <Text style={styles.headerCount}>
-              Showing {count} {count === 1 ? 'product' : 'products'}
+            <Text style={styles.headerCount} numberOfLines={1}>
+              {countLine}
             </Text>
           )}
         </View>
         <Pressable
-          style={styles.sortBtn}
+          style={({ pressed }) => [
+            styles.sortBtn,
+            !sortIsDefault && styles.sortBtnActive,
+            pressed && styles.sortBtnPressed,
+          ]}
           onPress={() => setSortSheetOpen(true)}
+          // Pill is shorter than 44pt; extend the touch target without growing it.
+          hitSlop={{ top: 10, bottom: 10, left: 8, right: 8 }}
           accessibilityRole="button"
           accessibilityLabel={`Sort products, currently ${COLLECTION_SORT_LABELS[sort]}`}
         >
@@ -163,6 +178,7 @@ export default function CategoryScreen() {
             <LoadMoreFooter
               loadingMore={loadingMore}
               pageError={pageError}
+              hasMore={hasMore}
               onRetry={retryLoadMore}
             />
           }
@@ -226,6 +242,13 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     paddingHorizontal: 12,
     paddingVertical: 6,
+  },
+  // Light pink fill signals a non-default sort is applied.
+  sortBtnActive: {
+    backgroundColor: '#FCE4EC',
+  },
+  sortBtnPressed: {
+    opacity: 0.6,
   },
   sortBtnText: {
     fontSize: 13,
