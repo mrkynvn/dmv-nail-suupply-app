@@ -28,6 +28,7 @@ export type {
   CatalogueCollection,
   PageInfo,
   Paginated,
+  CollectionProductsPage,
 } from './catalogueTypes';
 export {
   cacheProduct,

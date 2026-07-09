@@ -21,7 +21,12 @@ import {
   type ProductByHandleQueryData,
   type ProductSearchQueryData,
 } from './catalogueQueries';
-import type { CatalogueCollection, CatalogueProduct, Paginated } from './catalogueTypes';
+import type {
+  CatalogueCollection,
+  CatalogueProduct,
+  CollectionProductsPage,
+  Paginated,
+} from './catalogueTypes';
 
 // Default page size for list/search queries when a caller does not specify one.
 const DEFAULT_PAGE_SIZE = 24;
@@ -65,11 +70,13 @@ export async function fetchCollections(opts: PageOpts = {}): Promise<Paginated<C
 }
 
 // Fetch a page of products within a collection, by collection handle. Returns
-// an empty page if the handle matches no collection.
+// an empty page (with `collection: null`) if the handle matches no collection.
+// The query already selects the collection's own fields, so the title/handle are
+// returned alongside the products for the caller's header — no extra request.
 export async function fetchCollectionProducts(
   handle: string,
   opts: PageOpts = {}
-): Promise<Paginated<CatalogueProduct>> {
+): Promise<CollectionProductsPage> {
   const data = await runQuery<CollectionProductsQueryData>(COLLECTION_PRODUCTS_QUERY, {
     handle,
     first: opts.first ?? DEFAULT_PAGE_SIZE,
@@ -77,12 +84,16 @@ export async function fetchCollectionProducts(
   });
 
   if (!data.collection) {
-    return { items: [], pageInfo: { hasNextPage: false, endCursor: null } };
+    return { items: [], pageInfo: { hasNextPage: false, endCursor: null }, collection: null };
   }
 
   const items = data.collection.products.nodes.map(adaptProductCard);
   cacheProducts(items);
-  return { items, pageInfo: adaptPageInfo(data.collection.products.pageInfo) };
+  return {
+    items,
+    pageInfo: adaptPageInfo(data.collection.products.pageInfo),
+    collection: adaptCollection(data.collection),
+  };
 }
 
 // Fetch a single product with full variant/image detail by handle, or null if

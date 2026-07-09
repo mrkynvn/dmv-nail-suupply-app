@@ -56,6 +56,45 @@ export function EmptyState({
   );
 }
 
+// FlatList footer for cursor pagination (M41S2C1). Shows a spinner while the
+// next page loads, or a retry row if the last page-load failed. Renders nothing
+// when idle (including when the list is exhausted).
+export function LoadMoreFooter({
+  loadingMore,
+  pageError,
+  onRetry,
+}: {
+  loadingMore: boolean;
+  pageError?: string | null;
+  onRetry?: () => void;
+}) {
+  if (pageError) {
+    return (
+      <View style={styles.footer}>
+        <Text style={styles.footerError}>{pageError}</Text>
+        {onRetry && (
+          <Pressable
+            style={styles.footerRetryBtn}
+            onPress={onRetry}
+            accessibilityRole="button"
+            accessibilityLabel="Retry loading more products"
+          >
+            <Text style={styles.retryText}>Retry</Text>
+          </Pressable>
+        )}
+      </View>
+    );
+  }
+  if (loadingMore) {
+    return (
+      <View style={styles.footer}>
+        <ActivityIndicator color={PINK} accessibilityLabel="Loading more products" />
+      </View>
+    );
+  }
+  return null;
+}
+
 const styles = StyleSheet.create({
   center: {
     alignItems: 'center',
@@ -85,5 +124,24 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontWeight: '600',
     fontSize: 14,
+  },
+
+  // Load-more footer
+  footer: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 20,
+    gap: 10,
+  },
+  footerError: {
+    fontSize: 13,
+    color: '#999',
+    textAlign: 'center',
+  },
+  footerRetryBtn: {
+    backgroundColor: PINK,
+    borderRadius: 10,
+    paddingHorizontal: 18,
+    paddingVertical: 8,
   },
 });

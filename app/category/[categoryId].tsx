@@ -10,12 +10,15 @@ import {
 import { useLocalSearchParams, router } from 'expo-router';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { fetchCollectionProducts } from '../../src/shopify';
-import type { CatalogueProduct } from '../../src/shopify';
+import type { CatalogueProduct, CatalogueCollection } from '../../src/shopify';
 import { ProductCard } from '../../components/products/ProductCard';
 import { catalogueProductToCardProduct } from '../../components/products/catalogueCardAdapter';
-import { useAsyncData } from '../../components/ui/useAsyncData';
-import { LoadingState, ErrorState, EmptyState } from '../../components/ui/AsyncStates';
+import { usePagedData } from '../../components/ui/usePagedData';
+import { LoadingState, ErrorState, EmptyState, LoadMoreFooter } from '../../components/ui/AsyncStates';
 import { productGridColumns, gridItemWidth } from '../../components/ui/grid';
+
+// Products per page request. Load-more appends further pages via cursor.
+const PAGE_SIZE = 24;
 
 const PINK = '#D81B60';
 const SCREEN_PADDING = 16;
@@ -42,18 +45,36 @@ export default function CategoryScreen() {
   }>();
   const { width } = useWindowDimensions();
 
-  const { data, loading, error, reload } = useAsyncData<CatalogueProduct[]>(async () => {
-    if (!handle) return [];
-    // First page only in M41S2B2; cursor pagination / infinite scroll deferred
-    // to M41S2C.
-    const page = await fetchCollectionProducts(handle, { first: 24 });
-    return page.items;
+  const {
+    items,
+    meta,
+    loading,
+    error,
+    loadingMore,
+    pageError,
+    reload,
+    loadMore,
+    retryLoadMore,
+  } = usePagedData<CatalogueProduct, CatalogueCollection>(async (cursor) => {
+    if (!handle) {
+      return { items: [], hasNextPage: false, endCursor: null, meta: null };
+    }
+    const page = await fetchCollectionProducts(handle, { first: PAGE_SIZE, after: cursor });
+    return {
+      items: page.items,
+      hasNextPage: page.pageInfo.hasNextPage,
+      endCursor: page.pageInfo.endCursor,
+      meta: page.collection,
+    };
   }, [handle]);
 
   const columns = productGridColumns(width);
   const itemWidth = gridItemWidth(width, columns, SCREEN_PADDING, GRID_GAP);
-  const count = data?.length ?? 0;
-  const headerTitle = title || (handle ? prettifyHandle(handle) : 'Category');
+  const count = items.length;
+  // Prefer the route title param, then the real fetched collection title, then a
+  // prettified handle fallback (e.g. a deep link with no title param).
+  const headerTitle =
+    title || meta?.title || (handle ? prettifyHandle(handle) : 'Category');
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -71,9 +92,11 @@ export default function CategoryScreen() {
           <Text style={styles.headerTitle} numberOfLines={1}>
             {headerTitle}
           </Text>
-          {!loading && !error && (
+          {!loading && !error && count > 0 && (
+            // Reflects only what is loaded so far — Storefront does not return a
+            // reliable total here, so we never imply this is the whole collection.
             <Text style={styles.headerCount}>
-              {count} {count === 1 ? 'product' : 'products'}
+              Showing {count} {count === 1 ? 'product' : 'products'}
             </Text>
           )}
         </View>
@@ -89,12 +112,23 @@ export default function CategoryScreen() {
         <FlatList<CatalogueProduct>
           // Remount when the column count changes (RN requirement for numColumns).
           key={columns}
-          data={data!}
+          data={items}
           numColumns={columns}
           keyExtractor={(p) => p.id}
           contentContainerStyle={styles.listContent}
           columnWrapperStyle={columns > 1 ? { gap: GRID_GAP } : undefined}
           showsVerticalScrollIndicator={false}
+          // Append the next page as the user nears the end. The hook guards
+          // against duplicate calls, exhaustion, and in-flight page errors.
+          onEndReached={loadMore}
+          onEndReachedThreshold={0.4}
+          ListFooterComponent={
+            <LoadMoreFooter
+              loadingMore={loadingMore}
+              pageError={pageError}
+              onRetry={retryLoadMore}
+            />
+          }
           renderItem={({ item }) => (
             <ProductCard
               product={catalogueProductToCardProduct(item)}

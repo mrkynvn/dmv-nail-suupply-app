@@ -92,3 +92,11 @@ export interface Paginated<T> {
   items: T[];
   pageInfo: PageInfo;
 }
+
+// A page of products within a collection, plus the collection's own metadata.
+// Extends the plain product page with `collection` so callers can render the
+// real collection title without a second request. `collection` is null when the
+// handle matches no collection (same empty-page semantics as Paginated).
+export interface CollectionProductsPage extends Paginated<CatalogueProduct> {
+  collection: CatalogueCollection | null;
+}
