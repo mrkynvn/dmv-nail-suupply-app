@@ -185,8 +185,9 @@ export default function CategoryScreen() {
           renderItem={({ item }) => (
             <ProductCard
               product={catalogueProductToCardProduct(item)}
-              // Product detail wiring is deferred (M41S2B2 exclusion): no-op tap.
-              onPress={() => {}}
+              // Open the Shopify-aware detail route keyed by the product *handle*
+              // (not the GID), matching the collection route's handle convention.
+              onPress={() => router.push(`/product/shopify/${item.handle}`)}
               // Display-only: Shopify-backed cards never write to cart/favorites.
               displayOnly
               imageHeight={140}
