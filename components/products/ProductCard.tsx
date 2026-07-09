@@ -1,4 +1,5 @@
-import { View, Text, StyleSheet, Pressable, StyleProp, ViewStyle } from 'react-native';
+import { useState } from 'react';
+import { View, Text, StyleSheet, Pressable, Image, StyleProp, ViewStyle } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { Product } from '../../src/data/types';
 import { useFavorites } from '../../src/favorites/FavoritesContext';
@@ -14,6 +15,12 @@ type ProductCardProps = {
   categoryLabel?: string;
   imageHeight?: number;
   style?: StyleProp<ViewStyle>;
+  // Explicit alt text for the product image; falls back to the product name.
+  imageAltText?: string;
+  // Display-only mode for Shopify-backed cards: suppresses the favorite and
+  // quick-add controls so such cards never write to cart/favorites (those
+  // stores are still mock-id based until a later migration milestone).
+  displayOnly?: boolean;
 };
 
 export function ProductCard({
@@ -24,11 +31,25 @@ export function ProductCard({
   categoryLabel,
   imageHeight = 150,
   style,
+  imageAltText,
+  displayOnly = false,
 }: ProductCardProps) {
   const { isFavorite, toggleFavorite } = useFavorites();
   const { addToCart } = useCart();
   const favorited = isFavorite(product.id);
   const outOfStock = !product.inStock;
+
+  // Track the URI that failed to load (rather than a bare boolean) so a card
+  // recycled by a list for a different product doesn't inherit a stale error.
+  const [erroredUri, setErroredUri] = useState<string | null>(null);
+  const isRemoteImage = /^https?:\/\//i.test(product.imageUrl);
+  const showImage = isRemoteImage && erroredUri !== product.imageUrl;
+  const imageLabel =
+    imageAltText && imageAltText.trim().length > 0 ? imageAltText : product.name;
+
+  // Display-only Shopify cards render neither control regardless of caller flags.
+  const showFav = showFavorite && !displayOnly;
+  const showAdd = showQuickAdd && !displayOnly;
 
   return (
     <Pressable
@@ -37,6 +58,20 @@ export function ProductCard({
     >
       {/* Image area */}
       <View style={[styles.imageArea, { height: imageHeight }]}>
+        {/* Real product image (remote URLs only); on error or for mock
+            `placeholder:*` values it is omitted and the colored area shows. */}
+        {showImage && (
+          <Image
+            source={{ uri: product.imageUrl }}
+            style={styles.image}
+            resizeMode="cover"
+            onError={() => setErroredUri(product.imageUrl)}
+            accessible
+            accessibilityRole="image"
+            accessibilityLabel={imageLabel}
+          />
+        )}
+
         {/* Bottom-left: New / Sale badges */}
         <View style={styles.badgesRow}>
           {product.isNew && (
@@ -59,7 +94,7 @@ export function ProductCard({
         )}
 
         {/* Top-right: Heart button */}
-        {showFavorite && (
+        {showFav && (
           <Pressable
             style={styles.heartBtn}
             onPress={() => toggleFavorite(product.id)}
@@ -100,7 +135,7 @@ export function ProductCard({
             )}
           </View>
 
-          {showQuickAdd && (
+          {showAdd && (
             <Pressable
               style={[styles.addBtn, outOfStock && styles.addBtnDisabled]}
               onPress={() => addToCart(product.id)}
@@ -135,15 +170,26 @@ const styles = StyleSheet.create({
     opacity: 0.65,
   },
 
-  // Image placeholder
+  // Image area. The colored background is the placeholder shown for mock
+  // `placeholder:*` products and as the fallback when a remote image fails; a
+  // real <Image> (styles.image) fills it edge-to-edge when present. Overlays
+  // (badges, out-of-stock, heart) are absolutely positioned so they sit above
+  // the image without relying on container padding.
   imageArea: {
     width: '100%',
     backgroundColor: '#EEEDF4',
-    justifyContent: 'flex-end',
-    alignItems: 'flex-start',
-    padding: 8,
+  },
+  image: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
   },
   badgesRow: {
+    position: 'absolute',
+    bottom: 8,
+    left: 8,
     flexDirection: 'row',
     gap: 4,
   },
