@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import {
   View,
   Text,
@@ -5,15 +6,18 @@ import {
   ScrollView,
   SafeAreaView,
   Pressable,
+  ActivityIndicator,
 } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { useRouter } from 'expo-router';
+import * as WebBrowser from 'expo-web-browser';
 import {
   useCart,
   getLineKey,
   MockCartItem,
   ShopifyCartItem,
 } from '../src/cart/CartContext';
+import { createShopifyCheckout } from '../src/shopify';
 import { getProductById } from '../src/data';
 
 const PINK = '#D81B60';
@@ -77,12 +81,41 @@ export default function CheckoutScreen() {
   const router = useRouter();
   const { items, subtotal, totalQuantity } = useCart();
 
-  // Informational only in S3B: this screen is review-only and opens no checkout.
-  // A mixed cart flags that a future Shopify checkout would cover only the
-  // catalogue (Shopify) items.
-  const hasShopify = items.some((i) => i.source === 'shopify');
+  const [status, setStatus] = useState<'idle' | 'loading'>('idle');
+  const [error, setError] = useState<string | null>(null);
+
+  const shopifyItems = items.filter(
+    (i): i is ShopifyCartItem => i.source === 'shopify'
+  );
+  const hasShopify = shopifyItems.length > 0;
   const hasMock = items.some((i) => i.source === 'mock');
   const isMixed = hasShopify && hasMock;
+
+  // Only a pure Shopify cart can hand off to secure checkout. Mixed and mock-only
+  // carts are blocked (see UX copy below) so we never silently drop items.
+  const canCheckout = hasShopify && !hasMock;
+
+  // Create a Storefront cart from the Shopify lines and open Shopify's hosted
+  // secure checkout in an in-app browser (SFSafariViewController on iOS). We do
+  // NOT persist the cart, clear the cart, or claim the order completed here.
+  const handleCheckout = async () => {
+    if (!canCheckout || status === 'loading') return;
+    setError(null);
+    setStatus('loading');
+    try {
+      const lines = shopifyItems.map((i) => ({
+        variantId: i.variantId,
+        quantity: i.quantity,
+      }));
+      const { checkoutUrl } = await createShopifyCheckout(lines);
+      await WebBrowser.openBrowserAsync(checkoutUrl);
+    } catch {
+      // Keep the message user-safe: never surface GraphQL/token/URL/cart id.
+      setError("We couldn't start secure checkout. Please try again.");
+    } finally {
+      setStatus('idle');
+    }
+  };
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -104,8 +137,9 @@ export default function CheckoutScreen() {
         <View style={styles.noticeCard}>
           <Ionicons name="information-circle-outline" size={22} color={PINK} />
           <Text style={styles.noticeText}>
-            This app is a product catalogue. Orders, payments, inventory
-            reservations, and delivery are not available in this app.
+            Catalogue items check out on Shopify's secure checkout. Payment and
+            delivery are handled by Shopify, not inside this app. Sample/demo
+            items are for display only.
           </Text>
         </View>
 
@@ -147,19 +181,61 @@ export default function CheckoutScreen() {
               </View>
             </View>
 
-            {isMixed ? (
-              <View style={styles.mixedNote}>
-                <Ionicons name="alert-circle-outline" size={18} color="#B0004E" />
-                <Text style={styles.mixedNoteText}>
-                  Your selection mixes catalogue items with sample items. Online
-                  checkout, when available, will cover catalogue items only.
+            {canCheckout ? (
+              <View style={styles.checkoutBlock}>
+                <Text style={styles.secureCopy}>
+                  Continuing opens Shopify's secure checkout in a private browser
+                  window to complete your purchase. Final taxes and shipping are
+                  shown there.
+                </Text>
+
+                {error ? (
+                  <View style={styles.errorRow}>
+                    <Ionicons name="warning-outline" size={16} color="#B00020" />
+                    <Text style={styles.errorText}>{error}</Text>
+                  </View>
+                ) : null}
+
+                <Pressable
+                  style={[
+                    styles.checkoutBtn,
+                    status === 'loading' && styles.checkoutBtnDisabled,
+                  ]}
+                  onPress={handleCheckout}
+                  disabled={status === 'loading'}
+                  accessibilityRole="button"
+                  accessibilityState={{ disabled: status === 'loading' }}
+                  accessibilityLabel="Continue to secure checkout"
+                >
+                  {status === 'loading' ? (
+                    <>
+                      <ActivityIndicator size="small" color="#fff" />
+                      <Text style={styles.checkoutBtnText}>
+                        Preparing secure checkout…
+                      </Text>
+                    </>
+                  ) : (
+                    <Text style={styles.checkoutBtnText}>
+                      Continue to Secure Checkout
+                    </Text>
+                  )}
+                </Pressable>
+
+                <Text style={styles.postCopy}>
+                  If you complete checkout, Shopify sends your confirmation. Your
+                  cart stays here until you remove items.
                 </Text>
               </View>
-            ) : null}
-
-            <Text style={styles.disclaimer}>
-              Prices are for reference only. This is not an order.
-            </Text>
+            ) : (
+              <View style={styles.blockNote}>
+                <Ionicons name="alert-circle-outline" size={18} color="#B0004E" />
+                <Text style={styles.blockNoteText}>
+                  {isMixed
+                    ? 'To continue to secure checkout, remove the sample/demo items from your cart. Only catalogue items can be purchased.'
+                    : 'These are sample/demo items and can’t be purchased. Add catalogue products to check out.'}
+                </Text>
+              </View>
+            )}
 
             <Pressable
               style={styles.continueShoppingBtn}
@@ -332,7 +408,56 @@ const styles = StyleSheet.create({
     color: PINK,
   },
 
-  mixedNote: {
+  checkoutBlock: {
+    gap: 12,
+  },
+  secureCopy: {
+    fontSize: 12,
+    color: '#777',
+    lineHeight: 18,
+    textAlign: 'center',
+  },
+  checkoutBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    backgroundColor: PINK,
+    borderRadius: 12,
+    paddingVertical: 15,
+    paddingHorizontal: 28,
+  },
+  checkoutBtnDisabled: {
+    opacity: 0.6,
+  },
+  checkoutBtnText: {
+    color: '#fff',
+    fontWeight: '700',
+    fontSize: 15,
+  },
+  postCopy: {
+    fontSize: 11,
+    color: '#AAA',
+    textAlign: 'center',
+    lineHeight: 16,
+  },
+  errorRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 6,
+    backgroundColor: '#FDECEE',
+    borderRadius: 10,
+    padding: 10,
+  },
+  errorText: {
+    flex: 1,
+    fontSize: 12,
+    color: '#B00020',
+    fontWeight: '500',
+    lineHeight: 17,
+  },
+
+  blockNote: {
     flexDirection: 'row',
     alignItems: 'flex-start',
     gap: 8,
@@ -342,19 +467,11 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     padding: 12,
   },
-  mixedNoteText: {
+  blockNoteText: {
     flex: 1,
     fontSize: 12,
     color: '#B0004E',
     fontWeight: '500',
     lineHeight: 17,
-  },
-
-  disclaimer: {
-    fontSize: 11,
-    color: '#BBB',
-    textAlign: 'center',
-    fontStyle: 'italic',
-    marginTop: -4,
   },
 });
