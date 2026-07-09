@@ -70,6 +70,9 @@ export default function ProductDetailScreen() {
         <Pressable
           style={styles.backBtn}
           onPress={() => router.back()}
+          // Icon is visually small; extend the touch target toward 44pt
+          // (matches the category screen back button).
+          hitSlop={10}
           accessibilityRole="button"
           accessibilityLabel="Go back"
         >
