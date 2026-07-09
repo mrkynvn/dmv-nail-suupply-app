@@ -32,7 +32,6 @@ const VARIANT_FRAGMENT = `
     title
     sku
     availableForSale
-    quantityAvailable
     currentlyNotInStock
     price { ...MoneyFields }
     compareAtPrice { ...MoneyFields }
@@ -181,7 +180,6 @@ export interface RawVariant {
   title: string;
   sku: string | null;
   availableForSale: boolean;
-  quantityAvailable: number | null;
   currentlyNotInStock: boolean;
   price: RawMoney;
   compareAtPrice: RawMoney | null;

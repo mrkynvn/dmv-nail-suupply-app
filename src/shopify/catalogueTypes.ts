@@ -37,9 +37,10 @@ export interface ProductVariant {
   availableForSale: boolean;
   price: Money;
   compareAtPrice: Money | null;
-  // Inventory state. `quantityAvailable` is null when the Storefront token lacks
-  // the inventory scope or the shop hides it; treat null as "unknown", not zero.
-  quantityAvailable: number | null;
+  // Inventory state. `currentlyNotInStock` reflects whether the variant is
+  // oversellable while at zero stock; exact remaining counts are omitted because
+  // the app's access credentials lack the inventory scope. Availability for v1
+  // is driven by `availableForSale`.
   currentlyNotInStock: boolean;
   selectedOptions: { name: string; value: string }[];
   image: ProductImage | null;

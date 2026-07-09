@@ -55,7 +55,6 @@ export function adaptVariant(raw: RawVariant): ProductVariant {
     availableForSale: raw.availableForSale,
     price: parseMoney(raw.price),
     compareAtPrice: raw.compareAtPrice ? parseMoney(raw.compareAtPrice) : null,
-    quantityAvailable: raw.quantityAvailable,
     currentlyNotInStock: raw.currentlyNotInStock,
     selectedOptions: raw.selectedOptions.map((o) => ({ name: o.name, value: o.value })),
     image: adaptImage(raw.image),
