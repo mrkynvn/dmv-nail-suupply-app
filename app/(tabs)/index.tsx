@@ -7,28 +7,25 @@ import {
   StyleSheet,
   SafeAreaView,
   Pressable,
+  useWindowDimensions,
 } from 'react-native';
 import { router } from 'expo-router';
-import { categories, getFeaturedProducts, getOnSaleProducts, getProductById } from '../../src/data';
-import { Product, Category } from '../../src/data';
+import { getFeaturedProducts, getOnSaleProducts, getProductById } from '../../src/data';
+import { Product } from '../../src/data';
+import { fetchCollections } from '../../src/shopify';
+import type { CatalogueCollection } from '../../src/shopify';
 import { ProductCard } from '../../components/products/ProductCard';
+import { CollectionTile } from '../../components/collections/CollectionTile';
+import { filterCategoryCollections } from '../../components/collections/collectionFilter';
+import { useAsyncData } from '../../components/ui/useAsyncData';
+import { LoadingState, ErrorState, EmptyState } from '../../components/ui/AsyncStates';
+import { homeCategoryColumns, gridItemWidth } from '../../components/ui/grid';
 import { useRecentlyViewed } from '../../src/recentlyViewed/RecentlyViewedContext';
 
 const DMV_LOGO = require('../../assets/images/dmv-logo.png');
 
-// ── Category item ────────────────────────────────────────────────────────────
-
-function CategoryItem({ category }: { category: Category }) {
-  return (
-    <Pressable
-      style={styles.categoryItem}
-      onPress={() => router.push(`/category/${category.id}`)}
-    >
-      <Text style={styles.categoryIcon}>{category.icon}</Text>
-      <Text style={styles.categoryName}>{category.name}</Text>
-    </Pressable>
-  );
-}
+const HOME_SECTION_PADDING = 20;
+const HOME_GRID_GAP = 10;
 
 // ── Product section (horizontal scroll) ─────────────────────────────────────
 
@@ -75,8 +72,27 @@ function ProductSection({
 export default function HomeScreen() {
   const newProducts = getFeaturedProducts();
   const saleProducts = getOnSaleProducts();
+  const { width } = useWindowDimensions();
+
+  // Shopify-backed category grid (mock product rails below stay as-is for now).
+  const {
+    data: collections,
+    loading: collectionsLoading,
+    error: collectionsError,
+    reload: reloadCollections,
+  } = useAsyncData<CatalogueCollection[]>(async () => {
+    // First page only in M41S2B2; cursor pagination deferred to M41S2C.
+    const page = await fetchCollections({ first: 50 });
+    return filterCategoryCollections(page.items).included;
+  }, []);
+
+  const columns = homeCategoryColumns(width);
+  const homeItemWidth = gridItemWidth(width, columns, HOME_SECTION_PADDING, HOME_GRID_GAP);
   const [showAllCategories, setShowAllCategories] = useState(false);
-  const visibleCategories = showAllCategories ? categories : categories.slice(0, 4);
+  const allCollections = collections ?? [];
+  const visibleCollections = showAllCategories
+    ? allCollections
+    : allCollections.slice(0, columns);
 
   const { recentProductIds, hydrated } = useRecentlyViewed();
   const recentProducts = recentProductIds
@@ -103,23 +119,44 @@ export default function HomeScreen() {
           </Text>
         </View>
 
-        {/* Category grid */}
+        {/* Category grid (Shopify collections) */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Shop by Category</Text>
-          <View style={styles.categoryGrid}>
-            {visibleCategories.map((cat) => (
-              <CategoryItem key={cat.id} category={cat} />
-            ))}
-          </View>
-          {categories.length > 4 && (
-            <Pressable
-              style={styles.showMoreBtn}
-              onPress={() => setShowAllCategories((prev) => !prev)}
-            >
-              <Text style={styles.showMoreText}>
-                {showAllCategories ? 'Show less' : 'Show more'}
-              </Text>
-            </Pressable>
+          {collectionsLoading ? (
+            <LoadingState label="Loading categories…" />
+          ) : collectionsError ? (
+            <ErrorState message={collectionsError} onRetry={reloadCollections} />
+          ) : allCollections.length === 0 ? (
+            <EmptyState message="No categories available yet." />
+          ) : (
+            <>
+              <View style={[styles.categoryGrid, { gap: HOME_GRID_GAP }]}>
+                {visibleCollections.map((collection) => (
+                  <CollectionTile
+                    key={collection.id}
+                    collection={collection}
+                    onPress={() =>
+                      router.push({
+                        pathname: '/category/[categoryId]',
+                        params: { categoryId: collection.handle, title: collection.title },
+                      })
+                    }
+                    imageHeight={64}
+                    style={{ width: homeItemWidth }}
+                  />
+                ))}
+              </View>
+              {allCollections.length > columns && (
+                <Pressable
+                  style={styles.showMoreBtn}
+                  onPress={() => setShowAllCategories((prev) => !prev)}
+                >
+                  <Text style={styles.showMoreText}>
+                    {showAllCategories ? 'Show less' : 'Show more'}
+                  </Text>
+                </Pressable>
+              )}
+            </>
           )}
         </View>
 
@@ -215,25 +252,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: 10,
-  },
-  categoryItem: {
-    width: '22%',
-    backgroundColor: '#fff',
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: '#EEEEEE',
-    paddingVertical: 12,
-    alignItems: 'center',
-    gap: 6,
-  },
-  categoryIcon: {
-    fontSize: 24,
-  },
-  categoryName: {
-    fontSize: 10,
-    color: '#444',
-    fontWeight: '500',
-    textAlign: 'center',
   },
 
   // Show more / less
