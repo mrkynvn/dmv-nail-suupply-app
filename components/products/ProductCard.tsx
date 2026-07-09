@@ -9,7 +9,9 @@ const PINK = '#D81B60';
 
 type ProductCardProps = {
   product: Product;
-  onPress: () => void;
+  // Optional so a card can be a deliberate no-op (e.g. a Shopify card missing a
+  // valid handle): with no handler the Pressable renders but does not navigate.
+  onPress?: () => void;
   showFavorite?: boolean;
   showQuickAdd?: boolean;
   categoryLabel?: string;

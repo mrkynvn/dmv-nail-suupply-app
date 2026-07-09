@@ -187,7 +187,14 @@ export default function CategoryScreen() {
               product={catalogueProductToCardProduct(item)}
               // Open the Shopify-aware detail route keyed by the product *handle*
               // (not the GID), matching the collection route's handle convention.
-              onPress={() => router.push(`/product/shopify/${item.handle}`)}
+              // Guard the handle: without a valid, non-empty one the detail route
+              // (fetchProductByHandle) has nothing to look up, so the card stays a
+              // no-op rather than pushing to a broken /product/shopify/ path.
+              onPress={
+                item.handle?.trim()
+                  ? () => router.push(`/product/shopify/${item.handle}`)
+                  : undefined
+              }
               // Display-only: Shopify-backed cards never write to cart/favorites.
               displayOnly
               imageHeight={140}
