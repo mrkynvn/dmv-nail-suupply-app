@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import {
   View,
   Text,
@@ -10,9 +11,17 @@ import {
 import { useLocalSearchParams, router } from 'expo-router';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { fetchCollectionProducts } from '../../src/shopify';
-import type { CatalogueProduct, CatalogueCollection } from '../../src/shopify';
+import type {
+  CatalogueProduct,
+  CatalogueCollection,
+  CollectionSortOption,
+} from '../../src/shopify';
 import { ProductCard } from '../../components/products/ProductCard';
 import { catalogueProductToCardProduct } from '../../components/products/catalogueCardAdapter';
+import {
+  CollectionSortSheet,
+  COLLECTION_SORT_LABELS,
+} from '../../components/products/CollectionSortSheet';
 import { usePagedData } from '../../components/ui/usePagedData';
 import { LoadingState, ErrorState, EmptyState, LoadMoreFooter } from '../../components/ui/AsyncStates';
 import { productGridColumns, gridItemWidth } from '../../components/ui/grid';
@@ -45,6 +54,11 @@ export default function CategoryScreen() {
   }>();
   const { width } = useWindowDimensions();
 
+  // Selected sort for this collection. 'featured' is the collection's own
+  // configured order — the same request C2A made before sort existed.
+  const [sort, setSort] = useState<CollectionSortOption>('featured');
+  const [sortSheetOpen, setSortSheetOpen] = useState(false);
+
   const {
     items,
     meta,
@@ -59,14 +73,16 @@ export default function CategoryScreen() {
     if (!handle) {
       return { items: [], hasNextPage: false, endCursor: null, meta: null };
     }
-    const page = await fetchCollectionProducts(handle, { first: PAGE_SIZE, after: cursor });
+    const page = await fetchCollectionProducts(handle, { first: PAGE_SIZE, after: cursor, sort });
     return {
       items: page.items,
       hasNextPage: page.pageInfo.hasNextPage,
       endCursor: page.pageInfo.endCursor,
       meta: page.collection,
     };
-  }, [handle]);
+    // `sort` in deps: changing it resets the cursor/items and refetches page one
+    // in the new order (usePagedData's deps-change reset).
+  }, [handle, sort]);
 
   const columns = productGridColumns(width);
   const itemWidth = gridItemWidth(width, columns, SCREEN_PADDING, GRID_GAP);
@@ -100,7 +116,28 @@ export default function CategoryScreen() {
             </Text>
           )}
         </View>
+        <Pressable
+          style={styles.sortBtn}
+          onPress={() => setSortSheetOpen(true)}
+          accessibilityRole="button"
+          accessibilityLabel={`Sort products, currently ${COLLECTION_SORT_LABELS[sort]}`}
+        >
+          <Ionicons name="swap-vertical" size={16} color={PINK} />
+          <Text style={styles.sortBtnText}>Sort</Text>
+        </Pressable>
       </View>
+
+      <CollectionSortSheet
+        visible={sortSheetOpen}
+        selected={sort}
+        onSelect={(option) => {
+          // Close first, then update; picking the current option is a no-op
+          // (same state value → no refetch).
+          setSortSheetOpen(false);
+          setSort(option);
+        }}
+        onClose={() => setSortSheetOpen(false)}
+      />
 
       {loading ? (
         <LoadingState label="Loading products…" />
@@ -179,6 +216,21 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: '#888',
     marginTop: 1,
+  },
+  sortBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    borderWidth: 1,
+    borderColor: PINK,
+    borderRadius: 16,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+  },
+  sortBtnText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: PINK,
   },
 
   // Grid
