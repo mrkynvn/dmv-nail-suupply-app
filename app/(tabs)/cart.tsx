@@ -5,22 +5,34 @@ import {
   ScrollView,
   SafeAreaView,
   Pressable,
+  Image,
   Alert,
 } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { useRouter } from 'expo-router';
-import { useCart, CartItem } from '../../src/cart/CartContext';
+import {
+  useCart,
+  getLineKey,
+  MockCartItem,
+  ShopifyCartItem,
+} from '../../src/cart/CartContext';
 import { getProductById } from '../../src/data';
 
 const PINK = '#D81B60';
 
-function CartItemRow({
+function formatMoney(amount: number, currencyCode: string): string {
+  return currencyCode === 'USD'
+    ? `$${amount.toFixed(2)}`
+    : `${amount.toFixed(2)} ${currencyCode}`;
+}
+
+function MockCartItemRow({
   item,
   onIncrement,
   onDecrement,
   onRemove,
 }: {
-  item: CartItem;
+  item: MockCartItem;
   onIncrement: () => void;
   onDecrement: () => void;
   onRemove: () => void;
@@ -93,8 +105,96 @@ function CartItemRow({
   );
 }
 
+function ShopifyCartItemRow({
+  item,
+  onIncrement,
+  onDecrement,
+  onRemove,
+}: {
+  item: ShopifyCartItem;
+  onIncrement: () => void;
+  onDecrement: () => void;
+  onRemove: () => void;
+}) {
+  const lineTotal = item.unitPrice * item.quantity;
+
+  return (
+    <View style={styles.itemCard}>
+      {/* Image (denormalized) */}
+      <View style={styles.itemImage}>
+        {item.imageUrl ? (
+          <Image
+            source={{ uri: item.imageUrl }}
+            style={StyleSheet.absoluteFill}
+            resizeMode="cover"
+          />
+        ) : (
+          <Text style={styles.itemImageLabel} numberOfLines={1}>
+            {item.title}
+          </Text>
+        )}
+      </View>
+
+      <View style={styles.itemInfo}>
+        {item.vendor ? <Text style={styles.itemBrand}>{item.vendor}</Text> : null}
+        <Text style={styles.itemName} numberOfLines={2}>
+          {item.title}
+        </Text>
+        {item.variantTitle ? (
+          <Text style={styles.itemVariant} numberOfLines={1}>
+            {item.variantTitle}
+          </Text>
+        ) : null}
+        <Text style={styles.itemPrice}>
+          {formatMoney(item.unitPrice, item.currencyCode)} each
+        </Text>
+
+        <View style={styles.itemBottom}>
+          {/* Quantity controls */}
+          <View style={styles.qtyRow}>
+            <Pressable
+              style={styles.qtyBtn}
+              onPress={onDecrement}
+              hitSlop={12}
+              accessibilityRole="button"
+              accessibilityLabel={`Decrease quantity for ${item.title}`}
+            >
+              <Ionicons name="remove" size={16} color={PINK} />
+            </Pressable>
+            <Text style={styles.qtyText}>{item.quantity}</Text>
+            <Pressable
+              style={styles.qtyBtn}
+              onPress={onIncrement}
+              hitSlop={12}
+              accessibilityRole="button"
+              accessibilityLabel={`Increase quantity for ${item.title}`}
+            >
+              <Ionicons name="add" size={16} color={PINK} />
+            </Pressable>
+          </View>
+
+          <Text style={styles.lineTotal}>
+            {formatMoney(lineTotal, item.currencyCode)}
+          </Text>
+        </View>
+      </View>
+
+      {/* Remove */}
+      <Pressable
+        style={styles.removeBtn}
+        onPress={onRemove}
+        hitSlop={12}
+        accessibilityRole="button"
+        accessibilityLabel={`Remove ${item.title} from cart`}
+      >
+        <Ionicons name="close-circle" size={20} color="#BBBBBB" />
+      </Pressable>
+    </View>
+  );
+}
+
 export default function CartScreen() {
-  const { items, subtotal, totalQuantity, incrementQuantity, decrementQuantity, removeFromCart, clearCart } =
+  const { items, subtotal, totalQuantity, incrementLine, decrementLine, removeLine, clearCart } =
     useCart();
   const router = useRouter();
 
@@ -110,6 +210,7 @@ export default function CartScreen() {
   }
 
   const savings = items.reduce((sum, item) => {
+    if (item.source !== 'mock') return sum;
     const p = getProductById(item.productId);
     if (!p?.isOnSale || !p.originalPrice) return sum;
     return sum + (p.originalPrice - p.price) * item.quantity;
@@ -151,15 +252,26 @@ export default function CartScreen() {
             contentContainerStyle={styles.scrollContent}
             showsVerticalScrollIndicator={false}
           >
-            {items.map((item) => (
-              <CartItemRow
-                key={item.productId}
-                item={item}
-                onIncrement={() => incrementQuantity(item.productId)}
-                onDecrement={() => decrementQuantity(item.productId)}
-                onRemove={() => removeFromCart(item.productId)}
-              />
-            ))}
+            {items.map((item) => {
+              const lineKey = getLineKey(item);
+              return item.source === 'shopify' ? (
+                <ShopifyCartItemRow
+                  key={lineKey}
+                  item={item}
+                  onIncrement={() => incrementLine(lineKey)}
+                  onDecrement={() => decrementLine(lineKey)}
+                  onRemove={() => removeLine(lineKey)}
+                />
+              ) : (
+                <MockCartItemRow
+                  key={lineKey}
+                  item={item}
+                  onIncrement={() => incrementLine(lineKey)}
+                  onDecrement={() => decrementLine(lineKey)}
+                  onRemove={() => removeLine(lineKey)}
+                />
+              );
+            })}
           </ScrollView>
 
           {/* Summary bar */}
@@ -304,6 +416,10 @@ const styles = StyleSheet.create({
   itemPrice: {
     fontSize: 12,
     color: '#777',
+  },
+  itemVariant: {
+    fontSize: 11,
+    color: '#999',
   },
   priceRow: {
     flexDirection: 'row',
