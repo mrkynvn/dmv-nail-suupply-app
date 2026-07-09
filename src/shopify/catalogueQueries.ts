@@ -106,12 +106,21 @@ export const COLLECTIONS_QUERY = op(
   IMAGE_FRAGMENT
 );
 
+// `$sortKey`/`$reverse` default to the collection's own order (COLLECTION_DEFAULT,
+// not reversed), so omitting them is identical to the pre-sort query — callers
+// that pass no sort get unchanged behavior.
 export const COLLECTION_PRODUCTS_QUERY = op(
   `
-    query CollectionProducts($handle: String!, $first: Int!, $after: String) {
+    query CollectionProducts(
+      $handle: String!
+      $first: Int!
+      $after: String
+      $sortKey: ProductCollectionSortKeys = COLLECTION_DEFAULT
+      $reverse: Boolean = false
+    ) {
       collection(handle: $handle) {
         ...CollectionFields
-        products(first: $first, after: $after) {
+        products(first: $first, after: $after, sortKey: $sortKey, reverse: $reverse) {
           nodes { ...ProductCardFields }
           pageInfo { hasNextPage endCursor }
         }
@@ -241,10 +250,21 @@ export interface CollectionProductsQueryData {
     | null;
 }
 
+// The subset of Storefront `ProductCollectionSortKeys` the app maps its
+// `CollectionSortOption`s onto (M41S2C2A). GraphQL enum knowledge stays here.
+export type ProductCollectionSortKey =
+  | 'COLLECTION_DEFAULT'
+  | 'CREATED'
+  | 'PRICE'
+  | 'TITLE';
+
 export interface CollectionProductsQueryVars {
   handle: string;
   first: number;
   after?: string | null;
+  // Omitted → query defaults (COLLECTION_DEFAULT / not reversed) apply.
+  sortKey?: ProductCollectionSortKey;
+  reverse?: boolean;
 }
 
 export interface ProductByHandleQueryData {

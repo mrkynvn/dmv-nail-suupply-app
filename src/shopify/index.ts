@@ -26,6 +26,7 @@ export type {
   ProductVariant,
   CatalogueProduct,
   CatalogueCollection,
+  CollectionSortOption,
   PageInfo,
   Paginated,
   CollectionProductsPage,

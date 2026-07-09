@@ -19,12 +19,14 @@ import {
   type CollectionProductsQueryData,
   type CollectionsQueryData,
   type ProductByHandleQueryData,
+  type ProductCollectionSortKey,
   type ProductSearchQueryData,
 } from './catalogueQueries';
 import type {
   CatalogueCollection,
   CatalogueProduct,
   CollectionProductsPage,
+  CollectionSortOption,
   Paginated,
 } from './catalogueTypes';
 
@@ -35,6 +37,26 @@ interface PageOpts {
   first?: number;
   after?: string | null;
 }
+
+// Options for fetchCollectionProducts: a page window plus an optional sort.
+// Omitting `sort` leaves the collection's default order untouched.
+interface CollectionProductsOpts extends PageOpts {
+  sort?: CollectionSortOption;
+}
+
+// Translate an app-facing sort option into Storefront (sortKey, reverse). The
+// `'featured'` case is absent on purpose: it means "collection default", so
+// callers omit sort entirely and the query defaults handle it (see
+// COLLECTION_PRODUCTS_QUERY) — keeping the no-sort request byte-identical.
+const COLLECTION_SORT_MAP: Record<
+  Exclude<CollectionSortOption, 'featured'>,
+  { sortKey: ProductCollectionSortKey; reverse: boolean }
+> = {
+  newest: { sortKey: 'CREATED', reverse: true },
+  'price-low-high': { sortKey: 'PRICE', reverse: false },
+  'price-high-low': { sortKey: 'PRICE', reverse: true },
+  'title-az': { sortKey: 'TITLE', reverse: false },
+};
 
 // Run a catalogue query and return its data, mirroring fetchShopInfo's error
 // handling. Message text never includes the query variables or the token.
@@ -75,12 +97,16 @@ export async function fetchCollections(opts: PageOpts = {}): Promise<Paginated<C
 // returned alongside the products for the caller's header — no extra request.
 export async function fetchCollectionProducts(
   handle: string,
-  opts: PageOpts = {}
+  opts: CollectionProductsOpts = {}
 ): Promise<CollectionProductsPage> {
+  // Include sortKey/reverse only when a non-default sort is requested; otherwise
+  // omit them so the query's defaults preserve the collection's own order.
+  const sort = opts.sort && opts.sort !== 'featured' ? COLLECTION_SORT_MAP[opts.sort] : undefined;
   const data = await runQuery<CollectionProductsQueryData>(COLLECTION_PRODUCTS_QUERY, {
     handle,
     first: opts.first ?? DEFAULT_PAGE_SIZE,
     after: opts.after ?? null,
+    ...(sort ?? {}),
   });
 
   if (!data.collection) {

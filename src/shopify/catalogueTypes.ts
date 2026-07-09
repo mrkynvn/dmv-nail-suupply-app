@@ -81,6 +81,20 @@ export interface CatalogueCollection {
   image: ProductImage | null;
 }
 
+// App-facing sort options for products within a collection (M41S2C2A).
+//
+// A narrow, user-meaningful menu — decoupled from the Storefront
+// `ProductCollectionSortKeys` enum, which the catalogue helpers translate this
+// into (sort key + reverse). `'featured'` is the default and maps to the
+// collection's own configured order, i.e. the behavior when no sort is passed.
+// No UI consumes this yet; the sort sheet lands in M41S2C2B.
+export type CollectionSortOption =
+  | 'featured'
+  | 'newest'
+  | 'price-low-high'
+  | 'price-high-low'
+  | 'title-az';
+
 // Relay-style cursor pagination info, normalized for app use.
 export interface PageInfo {
   hasNextPage: boolean;
