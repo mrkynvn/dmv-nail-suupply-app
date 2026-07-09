@@ -8,14 +8,81 @@ import {
 } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { useRouter } from 'expo-router';
-import { useCart } from '../src/cart/CartContext';
+import {
+  useCart,
+  getLineKey,
+  MockCartItem,
+  ShopifyCartItem,
+} from '../src/cart/CartContext';
 import { getProductById } from '../src/data';
 
 const PINK = '#D81B60';
 
+function formatMoney(amount: number, currencyCode: string): string {
+  return currencyCode === 'USD'
+    ? `$${amount.toFixed(2)}`
+    : `${amount.toFixed(2)} ${currencyCode}`;
+}
+
+// A mock line prices live from the local catalogue. Returns null if the product
+// id no longer resolves (mirrors the cart tab's guard).
+function MockReviewLine({ item }: { item: MockCartItem }) {
+  const product = getProductById(item.productId);
+  if (!product) return null;
+  const lineTotal = product.price * item.quantity;
+  return (
+    <View style={styles.lineItem}>
+      <View style={styles.lineItemLeft}>
+        <Text style={styles.lineItemBrand}>{product.brand}</Text>
+        <Text style={styles.lineItemName} numberOfLines={2}>
+          {product.name}
+        </Text>
+        <Text style={styles.lineItemUnitPrice}>
+          ${product.price.toFixed(2)} each · Qty: {item.quantity}
+        </Text>
+      </View>
+      <Text style={styles.lineItemTotal}>${lineTotal.toFixed(2)}</Text>
+    </View>
+  );
+}
+
+// A Shopify line renders entirely from denormalized fields captured at add-time,
+// so it never depends on the mock catalogue or the Shopify cache.
+function ShopifyReviewLine({ item }: { item: ShopifyCartItem }) {
+  const lineTotal = item.unitPrice * item.quantity;
+  return (
+    <View style={styles.lineItem}>
+      <View style={styles.lineItemLeft}>
+        {item.vendor ? <Text style={styles.lineItemBrand}>{item.vendor}</Text> : null}
+        <Text style={styles.lineItemName} numberOfLines={2}>
+          {item.title}
+        </Text>
+        {item.variantTitle ? (
+          <Text style={styles.lineItemVariant} numberOfLines={1}>
+            {item.variantTitle}
+          </Text>
+        ) : null}
+        <Text style={styles.lineItemUnitPrice}>
+          {formatMoney(item.unitPrice, item.currencyCode)} each · Qty: {item.quantity}
+        </Text>
+      </View>
+      <Text style={styles.lineItemTotal}>
+        {formatMoney(lineTotal, item.currencyCode)}
+      </Text>
+    </View>
+  );
+}
+
 export default function CheckoutScreen() {
   const router = useRouter();
   const { items, subtotal, totalQuantity } = useCart();
+
+  // Informational only in S3B: this screen is review-only and opens no checkout.
+  // A mixed cart flags that a future Shopify checkout would cover only the
+  // catalogue (Shopify) items.
+  const hasShopify = items.some((i) => i.source === 'shopify');
+  const hasMock = items.some((i) => i.source === 'mock');
+  const isMixed = hasShopify && hasMock;
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -64,25 +131,13 @@ export default function CheckoutScreen() {
 
               <View style={styles.divider} />
 
-              {items.map((item) => {
-                const product = getProductById(item.productId);
-                if (!product) return null;
-                const lineTotal = product.price * item.quantity;
-                return (
-                  <View key={item.productId} style={styles.lineItem}>
-                    <View style={styles.lineItemLeft}>
-                      <Text style={styles.lineItemBrand}>{product.brand}</Text>
-                      <Text style={styles.lineItemName} numberOfLines={2}>
-                        {product.name}
-                      </Text>
-                      <Text style={styles.lineItemUnitPrice}>
-                        ${product.price.toFixed(2)} each · Qty: {item.quantity}
-                      </Text>
-                    </View>
-                    <Text style={styles.lineItemTotal}>${lineTotal.toFixed(2)}</Text>
-                  </View>
-                );
-              })}
+              {items.map((item) =>
+                item.source === 'shopify' ? (
+                  <ShopifyReviewLine key={getLineKey(item)} item={item} />
+                ) : (
+                  <MockReviewLine key={getLineKey(item)} item={item} />
+                )
+              )}
 
               <View style={styles.divider} />
 
@@ -91,6 +146,16 @@ export default function CheckoutScreen() {
                 <Text style={styles.subtotalValue}>${subtotal.toFixed(2)}</Text>
               </View>
             </View>
+
+            {isMixed ? (
+              <View style={styles.mixedNote}>
+                <Ionicons name="alert-circle-outline" size={18} color="#B0004E" />
+                <Text style={styles.mixedNoteText}>
+                  Your selection mixes catalogue items with sample items. Online
+                  checkout, when available, will cover catalogue items only.
+                </Text>
+              </View>
+            ) : null}
 
             <Text style={styles.disclaimer}>
               Prices are for reference only. This is not an order.
@@ -237,6 +302,11 @@ const styles = StyleSheet.create({
     color: '#111',
     lineHeight: 18,
   },
+  lineItemVariant: {
+    fontSize: 12,
+    color: '#777',
+    fontWeight: '500',
+  },
   lineItemUnitPrice: {
     fontSize: 12,
     color: '#999',
@@ -260,6 +330,24 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '700',
     color: PINK,
+  },
+
+  mixedNote: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 8,
+    backgroundColor: '#FFF5F8',
+    borderWidth: 1,
+    borderColor: '#F8BBD0',
+    borderRadius: 12,
+    padding: 12,
+  },
+  mixedNoteText: {
+    flex: 1,
+    fontSize: 12,
+    color: '#B0004E',
+    fontWeight: '500',
+    lineHeight: 17,
   },
 
   disclaimer: {

@@ -39,3 +39,10 @@ export {
   getCachedVariant,
   clearCatalogueCache,
 } from './catalogueCache';
+
+// Cart / checkout write boundary (M41S3B). Creates a Storefront cart and returns
+// its checkoutUrl. Raw GraphQL mutation stays internal to cartMutations.ts. This
+// boundary does not open checkout, persist the cart, or use any back-office API.
+export { createShopifyCheckout } from './cart';
+export { ShopifyCartError } from './cartTypes';
+export type { ShopifyCheckoutLineInput, ShopifyCheckoutResult } from './cartTypes';
