@@ -1,16 +1,15 @@
-// Shopify-aware product detail route, keyed by product handle (M41S2E1).
+// Shopify-aware product detail route, keyed by product handle (M41S2E1/E3).
 //
-// Reached from Shopify-backed category cards. Read-only with respect to
-// cart/checkout: it hydrates from the catalogue cache, refreshes via
-// fetchProductByHandle, and renders detail for the default variant only. The
-// Add to Cart button is intentionally inert — it has no onPress and never
-// touches CartContext, Shopify cart mutations, or any checkout flow. Cart
-// wiring lands in a later M41S2E sub-step.
+// Reached from Shopify-backed category cards. It hydrates from the catalogue
+// cache, refreshes via fetchProductByHandle, and renders detail for the default
+// variant only. Add to Cart adds a fully denormalized line to the LOCAL cart via
+// CartContext.addShopifyLine (M41S2E2 API) — no Shopify Cart API, checkout, or
+// payment. The button enables only for an available default variant.
 //
 // The mock detail route (app/product/[productId].tsx) is untouched and still
 // serves Home/Search/Favorites/Promotions mock-backed flows.
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -33,6 +32,8 @@ import type {
   ProductImage,
 } from '../../../src/shopify';
 import { LoadingState, ErrorState } from '../../../components/ui/AsyncStates';
+import { useCart } from '../../../src/cart/CartContext';
+import type { ShopifyCartLineInput } from '../../../src/cart/CartContext';
 
 const PINK = '#D81B60';
 
@@ -79,6 +80,19 @@ export default function ShopifyProductDetailScreen() {
   // Route key is the Shopify product *handle* (see app/category/[categoryId].tsx).
   const { handle } = useLocalSearchParams<{ handle: string }>();
   const { width } = useWindowDimensions();
+  const { addShopifyLine } = useCart();
+
+  // Local quantity (never below 1) and a transient "added" confirmation, mirroring
+  // the mock detail screen's add-to-cart UX.
+  const [qty, setQty] = useState(1);
+  const [showConfirm, setShowConfirm] = useState(false);
+  const confirmTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(
+    () => () => {
+      if (confirmTimer.current) clearTimeout(confirmTimer.current);
+    },
+    []
+  );
 
   // Hydrate immediately from the in-memory catalogue cache (populated when the
   // category grid rendered this product's card), then refresh with full detail.
@@ -203,6 +217,47 @@ export default function ShopifyProductDetailScreen() {
   const imageWidth = width;
   const imageHeight = 320;
 
+  // Add to Cart is enabled only when detail has resolved a default variant that
+  // is purchasable. No default variant (incl. the brief cache-only window) or an
+  // unavailable one keeps it disabled.
+  const canAddToCart = defaultVariant != null && defaultVariant.availableForSale;
+
+  // Image for the cart line: prefer the default variant's own image, then the
+  // product's featured image, then the first gallery image.
+  const lineImageUrl =
+    defaultVariant?.image?.url ??
+    product.featuredImage?.url ??
+    gallery[0]?.url ??
+    undefined;
+
+  // Shopify's implicit single variant is titled "Default Title"; only surface a
+  // variant title when it carries real option info.
+  const variantTitle =
+    defaultVariant && defaultVariant.title.trim().length > 0 &&
+    defaultVariant.title !== 'Default Title'
+      ? defaultVariant.title
+      : undefined;
+
+  const handleAddToCart = () => {
+    if (!canAddToCart || !defaultVariant) return;
+    const line: ShopifyCartLineInput = {
+      variantId: defaultVariant.id,
+      productId: product.id,
+      handle: product.handle,
+      title: product.title,
+      unitPrice: defaultVariant.price.amount,
+      currencyCode: defaultVariant.price.currencyCode,
+      availableForSale: defaultVariant.availableForSale,
+      ...(product.brand.trim().length > 0 ? { vendor: product.brand } : {}),
+      ...(lineImageUrl ? { imageUrl: lineImageUrl } : {}),
+      ...(variantTitle ? { variantTitle } : {}),
+    };
+    addShopifyLine(line, qty);
+    setShowConfirm(true);
+    if (confirmTimer.current) clearTimeout(confirmTimer.current);
+    confirmTimer.current = setTimeout(() => setShowConfirm(false), 2000);
+  };
+
   return (
     <SafeAreaView style={styles.safeArea}>
       {header(product.title)}
@@ -296,23 +351,63 @@ export default function ShopifyProductDetailScreen() {
         <View style={styles.buttonSpacer} />
       </ScrollView>
 
-      {/* Add to Cart bar. Read-only for M41S2E1: the button is permanently
-          disabled and has NO onPress, so it cannot reach CartContext, any
-          Shopify cart mutation, or checkout. Cart wiring is a later sub-step. */}
+      {/* Add to Cart bar (M41S2E3). Adds a denormalized line to the LOCAL cart
+          via CartContext.addShopifyLine — no Shopify Cart API or checkout. Only
+          enabled for an available default variant. */}
       <View style={styles.cartBar}>
+        {/* Quantity selector */}
+        <View style={styles.quantityRow}>
+          <Pressable
+            style={[styles.qtyBtn, (qty <= 1 || !canAddToCart) && styles.qtyBtnDisabled]}
+            onPress={() => setQty((q) => Math.max(1, q - 1))}
+            disabled={qty <= 1 || !canAddToCart}
+            hitSlop={8}
+            accessibilityRole="button"
+            accessibilityLabel="Decrease quantity"
+            accessibilityState={{ disabled: qty <= 1 || !canAddToCart }}
+          >
+            <Text
+              style={[
+                styles.qtyBtnText,
+                (qty <= 1 || !canAddToCart) && styles.qtyBtnTextDisabled,
+              ]}
+            >
+              −
+            </Text>
+          </Pressable>
+          <Text style={styles.qtyValue}>{qty}</Text>
+          <Pressable
+            style={[styles.qtyBtn, !canAddToCart && styles.qtyBtnDisabled]}
+            onPress={() => setQty((q) => q + 1)}
+            disabled={!canAddToCart}
+            hitSlop={8}
+            accessibilityRole="button"
+            accessibilityLabel="Increase quantity"
+            accessibilityState={{ disabled: !canAddToCart }}
+          >
+            <Text style={[styles.qtyBtnText, !canAddToCart && styles.qtyBtnTextDisabled]}>
+              +
+            </Text>
+          </Pressable>
+        </View>
+
         <Pressable
-          style={[styles.cartButton, styles.cartButtonDisabled]}
-          disabled
+          style={[styles.cartButton, !canAddToCart && styles.cartButtonDisabled]}
+          disabled={!canAddToCart}
+          onPress={handleAddToCart}
           accessibilityRole="button"
-          accessibilityState={{ disabled: true }}
-          accessibilityLabel={
-            outOfStock ? 'Out of stock' : 'Add to cart, coming soon'
-          }
+          accessibilityState={{ disabled: !canAddToCart }}
+          accessibilityLabel={outOfStock ? 'Out of stock' : 'Add to cart'}
         >
           <Text style={styles.cartButtonText}>
-            {outOfStock ? 'Out of Stock' : 'Add to Cart — Coming Next'}
+            {outOfStock ? 'Out of Stock' : 'Add to Cart'}
           </Text>
         </Pressable>
+
+        {/* Transient "added" confirmation; the Cart tab holds the line. */}
+        {showConfirm ? (
+          <Text style={styles.confirmLabel}>Added {qty} to cart</Text>
+        ) : null}
       </View>
     </SafeAreaView>
   );
@@ -495,13 +590,49 @@ const styles = StyleSheet.create({
     paddingTop: 12,
     paddingBottom: 14,
   },
+  // Quantity selector (mirrors the mock product detail stepper).
+  quantityRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 20,
+    paddingBottom: 12,
+  },
+  qtyBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    borderWidth: 1.5,
+    borderColor: PINK,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  qtyBtnDisabled: {
+    borderColor: '#DDDDDD',
+  },
+  qtyBtnText: {
+    fontSize: 20,
+    fontWeight: '600',
+    color: PINK,
+    lineHeight: 24,
+  },
+  qtyBtnTextDisabled: {
+    color: '#CCCCCC',
+  },
+  qtyValue: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#111',
+    minWidth: 28,
+    textAlign: 'center',
+  },
   cartButton: {
     backgroundColor: PINK,
     borderRadius: 12,
     paddingVertical: 15,
     alignItems: 'center',
   },
-  // Permanently disabled for this step (both in-stock "coming next" and OOS).
+  // Disabled when there is no available default variant (incl. OOS).
   cartButtonDisabled: {
     backgroundColor: '#CCCCCC',
   },
@@ -509,6 +640,13 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontWeight: '700',
     fontSize: 16,
+  },
+  confirmLabel: {
+    textAlign: 'center',
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#388E3C',
+    paddingTop: 10,
   },
 
   // Not found
