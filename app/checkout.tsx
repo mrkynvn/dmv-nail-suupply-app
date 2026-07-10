@@ -83,6 +83,10 @@ export default function CheckoutScreen() {
 
   const [status, setStatus] = useState<'idle' | 'loading'>('idle');
   const [error, setError] = useState<string | null>(null);
+  // True once the checkout browser has opened and been closed/returned at least
+  // once this session. Drives neutral post-return copy only — it makes NO claim
+  // about whether an order was placed. Non-persistent (resets on unmount).
+  const [checkoutReturned, setCheckoutReturned] = useState(false);
 
   const shopifyItems = items.filter(
     (i): i is ShopifyCartItem => i.source === 'shopify'
@@ -100,7 +104,9 @@ export default function CheckoutScreen() {
   // NOT persist the cart, clear the cart, or claim the order completed here.
   const handleCheckout = async () => {
     if (!canCheckout || status === 'loading') return;
+    // Fresh attempt: clear any prior error and the returned-from-checkout notice.
     setError(null);
+    setCheckoutReturned(false);
     setStatus('loading');
     try {
       const lines = shopifyItems.map((i) => ({
@@ -108,7 +114,12 @@ export default function CheckoutScreen() {
         quantity: i.quantity,
       }));
       const { checkoutUrl } = await createShopifyCheckout(lines);
+      // Resolves when the in-app browser is dismissed/closed. We treat ANY
+      // return (cancel, dismiss, done) as simply "came back from checkout" —
+      // making no claim either way about order state. We do not inspect order
+      // state, do not clear the cart, and do not persist anything.
       await WebBrowser.openBrowserAsync(checkoutUrl);
+      setCheckoutReturned(true);
     } catch {
       // Keep the message user-safe: never surface GraphQL/token/URL/cart id.
       setError("We couldn't start secure checkout. Please try again.");
@@ -221,10 +232,19 @@ export default function CheckoutScreen() {
                   )}
                 </Pressable>
 
-                <Text style={styles.postCopy}>
-                  If you complete checkout, Shopify sends your confirmation. Your
-                  cart stays here until you remove items.
-                </Text>
+                {checkoutReturned && !error ? (
+                  <View style={styles.returnedNotice}>
+                    <Ionicons
+                      name="information-circle-outline"
+                      size={16}
+                      color={PINK}
+                    />
+                    <Text style={styles.returnedNoticeText}>
+                      If you completed checkout, Shopify will send confirmation.
+                      Your cart stays here until you remove items.
+                    </Text>
+                  </View>
+                ) : null}
               </View>
             ) : (
               <View style={styles.blockNote}>
@@ -435,11 +455,22 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     fontSize: 15,
   },
-  postCopy: {
-    fontSize: 11,
-    color: '#AAA',
-    textAlign: 'center',
-    lineHeight: 16,
+  returnedNotice: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 8,
+    backgroundColor: '#FFF5F8',
+    borderWidth: 1,
+    borderColor: '#F8BBD0',
+    borderRadius: 10,
+    padding: 12,
+  },
+  returnedNoticeText: {
+    flex: 1,
+    fontSize: 12,
+    color: '#B0004E',
+    fontWeight: '500',
+    lineHeight: 17,
   },
   errorRow: {
     flexDirection: 'row',
