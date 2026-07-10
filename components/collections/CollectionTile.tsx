@@ -1,11 +1,9 @@
-// Reusable collection tile for the category grids (M41S2B2).
+// Reusable collection tile for the category grids (M41S2B2, icons M41S5A).
 //
-// Renders a Shopify collection's image (remote HTTPS via RN <Image> only — no
-// new native dependency) with a graceful icon fallback when the collection has
-// no image or the image fails to load. Used by both the Categories tab and the
-// compact Home "Shop by Category" row.
+// Renders a bundled local category icon resolved from the collection handle
+// (see categoryIcons.ts) — no remote image fetch, no network error states.
+// Used by both the Categories tab and the compact Home "Shop by Category" row.
 
-import { useState } from 'react';
 import {
   View,
   Text,
@@ -15,10 +13,12 @@ import {
   StyleProp,
   ViewStyle,
 } from 'react-native';
-import Ionicons from '@expo/vector-icons/Ionicons';
 import type { CatalogueCollection } from '../../src/shopify';
+import { getLocalCategoryIcon } from './categoryIcons';
 
-const PINK = '#D81B60';
+// Icon renders at ~55% of the image-area height so the artwork's built-in
+// safe-area padding stays visually balanced at both tile sizes (64 / 110).
+const ICON_SCALE = 0.55;
 
 export function CollectionTile({
   collection,
@@ -31,10 +31,7 @@ export function CollectionTile({
   imageHeight?: number;
   style?: StyleProp<ViewStyle>;
 }) {
-  const [errored, setErrored] = useState(false);
-  const uri = collection.image?.url;
-  const showImage = !!uri && /^https?:\/\//i.test(uri) && !errored;
-  const imageLabel = collection.image?.altText?.trim() || collection.title;
+  const iconSize = Math.round(imageHeight * ICON_SCALE);
 
   return (
     <Pressable
@@ -44,19 +41,14 @@ export function CollectionTile({
       accessibilityLabel={`${collection.title} category`}
     >
       <View style={[styles.thumb, { height: imageHeight }]}>
-        {showImage ? (
-          <Image
-            source={{ uri }}
-            style={styles.image}
-            resizeMode="cover"
-            onError={() => setErrored(true)}
-            accessible
-            accessibilityRole="image"
-            accessibilityLabel={imageLabel}
-          />
-        ) : (
-          <Ionicons name="pricetags-outline" size={22} color={PINK} />
-        )}
+        <Image
+          source={getLocalCategoryIcon(collection.handle)}
+          style={{ width: iconSize, height: iconSize }}
+          resizeMode="contain"
+          // Decorative: the Pressable already announces the collection title
+          // and role, so hide the icon from VoiceOver to avoid double output.
+          accessible={false}
+        />
       </View>
       <Text style={styles.title} numberOfLines={2}>
         {collection.title}
@@ -78,13 +70,6 @@ const styles = StyleSheet.create({
     backgroundColor: '#F4F1F7',
     alignItems: 'center',
     justifyContent: 'center',
-  },
-  image: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
   },
   title: {
     fontSize: 12,
