@@ -81,6 +81,13 @@ const COLLECTION_FRAGMENT = `
     title
     description
     image { ...ImageFields }
+    appIcon: metafield(namespace: "custom", key: "app_icon") {
+      reference {
+        ... on MediaImage {
+          image { ...ImageFields }
+        }
+      }
+    }
   }
 `;
 
@@ -212,12 +219,20 @@ export interface RawProductDetail extends RawProductCard {
   variants: { nodes: RawVariant[] };
 }
 
+// The `custom.app_icon` collection metafield, aliased to `appIcon` in the query.
+// `reference` is null when unset and may be a non-MediaImage reference (in which
+// case `image` is absent), so both levels are optional/nullable.
+export interface RawCollectionAppIcon {
+  reference: { image?: RawImage | null } | null;
+}
+
 export interface RawCollection {
   id: string;
   handle: string;
   title: string;
   description: string;
   image: RawImage | null;
+  appIcon: RawCollectionAppIcon | null;
 }
 
 export interface RawPageInfo {

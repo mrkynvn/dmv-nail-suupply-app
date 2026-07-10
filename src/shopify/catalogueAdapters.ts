@@ -114,6 +114,24 @@ export function adaptProductDetail(raw: RawProductDetail): CatalogueProduct {
   };
 }
 
+// Normalize the custom.app_icon collection metafield into an app icon image, or
+// null when it is unset/misconfigured. A valid remote icon requires a present
+// MediaImage node with a non-empty HTTPS URL; anything else (missing metafield,
+// null reference, non-MediaImage reference, blank or non-HTTPS URL) yields null
+// so the tile falls back to the local icon registry. Never throws.
+function adaptCollectionAppIcon(raw: RawCollection['appIcon']): ProductImage | null {
+  const image = raw?.reference?.image;
+  if (!image) return null;
+  const url = typeof image.url === 'string' ? image.url.trim() : '';
+  if (!/^https:\/\//i.test(url)) return null;
+  return {
+    url,
+    altText: image.altText ?? null,
+    width: image.width ?? null,
+    height: image.height ?? null,
+  };
+}
+
 export function adaptCollection(raw: RawCollection): CatalogueCollection {
   return {
     id: raw.id,
@@ -121,5 +139,6 @@ export function adaptCollection(raw: RawCollection): CatalogueCollection {
     title: raw.title,
     description: raw.description,
     image: adaptImage(raw.image),
+    appIcon: adaptCollectionAppIcon(raw.appIcon),
   };
 }

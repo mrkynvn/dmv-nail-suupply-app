@@ -80,6 +80,11 @@ export interface CatalogueCollection {
   title: string;
   description: string;
   image: ProductImage | null;
+  // Optional remote category icon from the Shopify Collection metafield
+  // custom.app_icon (M41S5B). Present only when the collection has a valid
+  // HTTPS MediaImage configured; null/absent otherwise, in which case the tile
+  // falls back to the local icon registry.
+  appIcon?: ProductImage | null;
 }
 
 // App-facing sort options for products within a collection (M41S2C2A).

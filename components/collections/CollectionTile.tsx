@@ -4,6 +4,7 @@
 // (see categoryIcons.ts) — no remote image fetch, no network error states.
 // Used by both the Categories tab and the compact Home "Shop by Category" row.
 
+import { useEffect, useState } from 'react';
 import {
   View,
   Text,
@@ -33,6 +34,21 @@ export function CollectionTile({
 }) {
   const iconSize = Math.round(imageHeight * ICON_SCALE);
 
+  // Source order: remote Shopify custom.app_icon (when valid and loadable) →
+  // bundled local icon (registry → essentials fallback). The remote image can
+  // fail at load time, so a per-tile flag switches to local on error; it resets
+  // when the collection handle or remote URL changes.
+  const remoteUrl = collection.appIcon?.url;
+  const [remoteFailed, setRemoteFailed] = useState(false);
+  useEffect(() => {
+    setRemoteFailed(false);
+  }, [collection.handle, remoteUrl]);
+
+  const useRemote = !!remoteUrl && !remoteFailed;
+  const iconSource = useRemote
+    ? { uri: remoteUrl }
+    : getLocalCategoryIcon(collection.handle);
+
   return (
     <Pressable
       style={[styles.tile, style]}
@@ -42,9 +58,11 @@ export function CollectionTile({
     >
       <View style={[styles.thumb, { height: imageHeight }]}>
         <Image
-          source={getLocalCategoryIcon(collection.handle)}
+          source={iconSource}
           style={{ width: iconSize, height: iconSize }}
           resizeMode="contain"
+          // On remote load failure, fall back to the local icon for this tile.
+          onError={useRemote ? () => setRemoteFailed(true) : undefined}
           // Decorative: the Pressable already announces the collection title
           // and role, so hide the icon from VoiceOver to avoid double output.
           accessible={false}
