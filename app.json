@@ -30,7 +30,20 @@
     "plugins": [
       "expo-router",
       "expo-asset",
-      "expo-web-browser"
+      "expo-web-browser",
+      [
+        "expo-splash-screen",
+        {
+          "backgroundColor": "#FFFFFF",
+          "image": "./assets/images/dmv-logo.png",
+          "imageWidth": 180,
+          "dark": {
+            "backgroundColor": "#FFFFFF",
+            "image": "./assets/images/dmv-logo.png",
+            "imageWidth": 180
+          }
+        }
+      ]
     ],
     "extra": {
       "eas": {
