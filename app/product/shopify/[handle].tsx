@@ -1,13 +1,16 @@
-// Shopify product detail route, keyed by product handle (M41S2E1/E3, M41S6E).
+// Shopify product detail route, keyed by product handle (M41S2E1/E3, M41S6E,
+// M41S6E-FIX1).
 //
 // The sole product detail route in the app. Reached from every product surface
 // (Home, Search, Promotions, Favorites, Recently Viewed, category listing). It
 // hydrates from the catalogue cache, refreshes via fetchProductByHandle, and
-// renders detail for the default variant. Add to Cart adds a fully denormalized
-// line to the LOCAL Shopify cart via CartContext.addShopifyLine — no Shopify
-// Cart API, checkout, or payment here. The button enables only for an available
-// default variant. A successful resolve records Recently Viewed (v2) and the
-// header favorite toggles by product GID.
+// renders an explicit variant selector whenever the product has more than one
+// variant (defaulting to the resolved default variant). Add to Cart adds a
+// fully denormalized line for the SELECTED variant to the LOCAL Shopify cart
+// via CartContext.addShopifyLine — no Shopify Cart API, checkout, or payment
+// here. The button enables only for an available selected variant. A
+// successful resolve records Recently Viewed (v2) and the header favorite
+// toggles by product GID.
 
 import { useEffect, useRef, useState } from 'react';
 import {
@@ -30,6 +33,7 @@ import type {
   CatalogueProduct,
   Money,
   ProductImage,
+  ProductVariant,
 } from '../../../src/shopify';
 import { LoadingState, ErrorState } from '../../../components/ui/AsyncStates';
 import { useCart } from '../../../src/cart/CartContext';
@@ -38,6 +42,41 @@ import { useFavorites } from '../../../src/favorites/FavoritesContext';
 import { useRecentlyViewed } from '../../../src/recentlyViewed/RecentlyViewedContext';
 
 const PINK = '#D81B60';
+
+// A variant's chosen option values, keyed by option name (e.g. { Size: '8oz' }).
+type SelectedOptions = Record<string, string>;
+
+function variantSelectedOptions(v: ProductVariant): SelectedOptions {
+  const out: SelectedOptions = {};
+  for (const o of v.selectedOptions) out[o.name] = o.value;
+  return out;
+}
+
+function variantMatchesSelection(v: ProductVariant, selection: SelectedOptions): boolean {
+  return v.selectedOptions.every((o) => selection[o.name] === o.value);
+}
+
+// One entry per option name that actually varies across this product's
+// variants (e.g. "Size", "Color"), in first-seen order, with every distinct
+// value observed. Option names with only one possible value are omitted —
+// there is nothing to choose.
+function buildOptionGroups(variants: ProductVariant[]): { name: string; values: string[] }[] {
+  const order: string[] = [];
+  const valuesByName = new Map<string, string[]>();
+  for (const v of variants) {
+    for (const o of v.selectedOptions) {
+      if (!valuesByName.has(o.name)) {
+        valuesByName.set(o.name, []);
+        order.push(o.name);
+      }
+      const values = valuesByName.get(o.name)!;
+      if (!values.includes(o.value)) values.push(o.value);
+    }
+  }
+  return order
+    .map((name) => ({ name, values: valuesByName.get(name)! }))
+    .filter((g) => g.values.length > 1);
+}
 
 // Currency-aware price string. USD (the store's currency) reads as "$12.00";
 // anything else falls back to "12.00 EUR" so the code is never dropped silently.
@@ -146,6 +185,20 @@ export default function ShopifyProductDetailScreen() {
     setReloadKey((k) => k + 1);
   };
 
+  // Which variant is currently chosen, by option name/value. Re-initialized to
+  // the default variant's own options whenever `product` is (re)set — the
+  // cache-hydrated product (no variant detail yet) yields an empty selection,
+  // then the full-detail fetch replaces it with the real default.
+  const [selectedOptions, setSelectedOptions] = useState<SelectedOptions>({});
+  useEffect(() => {
+    if (!product) return;
+    const initial =
+      product.hasVariantDetail && product.defaultVariantId
+        ? product.variants.find((v) => v.id === product.defaultVariantId) ?? product.variants[0]
+        : product.variants[0];
+    setSelectedOptions(initial ? variantSelectedOptions(initial) : {});
+  }, [product]);
+
   // Header shared by the fallback states so Back is always available. Matches the
   // category header (icon + hitSlop).
   const header = (title: string) => (
@@ -200,38 +253,48 @@ export default function ShopifyProductDetailScreen() {
     );
   }
 
-  // Default variant only for this step. Present once detail has been fetched.
-  const defaultVariant =
-    product.hasVariantDetail && product.defaultVariantId
-      ? product.variants.find((v) => v.id === product.defaultVariantId) ?? null
-      : null;
+  // The variant matching the current option selection. Present once detail has
+  // been fetched and the selection resolves to a real variant; null during the
+  // brief cache-only window, or if the chosen combination has no matching
+  // variant (only possible for stores with a sparse, non-full option matrix).
+  const selectedVariant = product.hasVariantDetail
+    ? product.variants.find((v) => variantMatchesSelection(v, selectedOptions)) ?? null
+    : null;
 
-  // Availability keys off the default variant once detail is loaded; before the
-  // refresh completes we fall back to the card-level flag. A product with detail
-  // but no usable default variant counts as out of stock.
+  // Option groups to present as a picker — only for products with more than one
+  // real variant. Single-variant products (incl. Shopify's implicit "Default
+  // Title" variant) never render a picker.
+  const optionGroups =
+    product.hasVariantDetail && product.variants.length > 1
+      ? buildOptionGroups(product.variants)
+      : [];
+
+  // Availability keys off the selected variant once detail is loaded; before the
+  // refresh completes (or for an unmatched combination) we fall back to the
+  // card-level flag / treat as out of stock.
   const outOfStock = product.hasVariantDetail
-    ? !(defaultVariant?.availableForSale ?? false)
+    ? !(selectedVariant?.availableForSale ?? false)
     : !product.availableForSale;
 
-  // Prefer the default variant's own price; fall back to the product's min price
-  // for the brief cache-only window before detail arrives.
-  const price = defaultVariant?.price ?? product.minPrice;
-  const compareAt = defaultVariant?.compareAtPrice ?? product.compareAtPrice;
+  // Prefer the selected variant's own price; fall back to the product's min
+  // price for the brief cache-only window before detail arrives.
+  const price = selectedVariant?.price ?? product.minPrice;
+  const compareAt = selectedVariant?.compareAtPrice ?? product.compareAtPrice;
   const showCompare = compareAt != null && compareAt.amount > price.amount;
 
   const gallery = product.images.length > 0 ? product.images : [];
   const imageWidth = width;
   const imageHeight = 320;
 
-  // Add to Cart is enabled only when detail has resolved a default variant that
-  // is purchasable. No default variant (incl. the brief cache-only window) or an
-  // unavailable one keeps it disabled.
-  const canAddToCart = defaultVariant != null && defaultVariant.availableForSale;
+  // Add to Cart is enabled only when a purchasable variant is selected. No
+  // matched variant (incl. the brief cache-only window, or an unavailable
+  // option combination) or an unavailable one keeps it disabled.
+  const canAddToCart = selectedVariant != null && selectedVariant.availableForSale;
 
-  // Image for the cart line: prefer the default variant's own image, then the
+  // Image for the cart line: prefer the selected variant's own image, then the
   // product's featured image, then the first gallery image.
   const lineImageUrl =
-    defaultVariant?.image?.url ??
+    selectedVariant?.image?.url ??
     product.featuredImage?.url ??
     gallery[0]?.url ??
     undefined;
@@ -239,21 +302,21 @@ export default function ShopifyProductDetailScreen() {
   // Shopify's implicit single variant is titled "Default Title"; only surface a
   // variant title when it carries real option info.
   const variantTitle =
-    defaultVariant && defaultVariant.title.trim().length > 0 &&
-    defaultVariant.title !== 'Default Title'
-      ? defaultVariant.title
+    selectedVariant && selectedVariant.title.trim().length > 0 &&
+    selectedVariant.title !== 'Default Title'
+      ? selectedVariant.title
       : undefined;
 
   const handleAddToCart = () => {
-    if (!canAddToCart || !defaultVariant) return;
+    if (!canAddToCart || !selectedVariant) return;
     const line: ShopifyCartLineInput = {
-      variantId: defaultVariant.id,
+      variantId: selectedVariant.id,
       productId: product.id,
       handle: product.handle,
       title: product.title,
-      unitPrice: defaultVariant.price.amount,
-      currencyCode: defaultVariant.price.currencyCode,
-      availableForSale: defaultVariant.availableForSale,
+      unitPrice: selectedVariant.price.amount,
+      currencyCode: selectedVariant.price.currencyCode,
+      availableForSale: selectedVariant.availableForSale,
       ...(product.brand.trim().length > 0 ? { vendor: product.brand } : {}),
       ...(lineImageUrl ? { imageUrl: lineImageUrl } : {}),
       ...(variantTitle ? { variantTitle } : {}),
@@ -366,6 +429,51 @@ export default function ShopifyProductDetailScreen() {
           )}
         </View>
 
+        {/* Variant selector — only for products with more than one real
+            variant. Selecting an option updates price/availability/Add to Cart
+            above and below via `selectedVariant`. */}
+        {optionGroups.length > 0 && (
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Options</Text>
+            {optionGroups.map((group) => (
+              <View key={group.name} style={styles.optionGroup}>
+                <Text style={styles.optionGroupLabel}>{group.name}</Text>
+                <View style={styles.optionChipsRow}>
+                  {group.values.map((value) => {
+                    const active = selectedOptions[group.name] === value;
+                    return (
+                      <Pressable
+                        key={value}
+                        style={[styles.optionChip, active && styles.optionChipActive]}
+                        onPress={() =>
+                          setSelectedOptions((prev) => ({ ...prev, [group.name]: value }))
+                        }
+                        accessibilityRole="button"
+                        accessibilityLabel={`${group.name}: ${value}`}
+                        accessibilityState={{ selected: active }}
+                      >
+                        <Text
+                          style={[
+                            styles.optionChipText,
+                            active && styles.optionChipTextActive,
+                          ]}
+                        >
+                          {value}
+                        </Text>
+                      </Pressable>
+                    );
+                  })}
+                </View>
+              </View>
+            ))}
+            {!selectedVariant && (
+              <Text style={styles.optionUnavailableText}>
+                This combination is unavailable.
+              </Text>
+            )}
+          </View>
+        )}
+
         {/* Description */}
         {product.description.trim().length > 0 && (
           <View style={styles.section}>
@@ -391,9 +499,9 @@ export default function ShopifyProductDetailScreen() {
         <View style={styles.buttonSpacer} />
       </ScrollView>
 
-      {/* Add to Cart bar (M41S2E3). Adds a denormalized line to the LOCAL cart
-          via CartContext.addShopifyLine — no Shopify Cart API or checkout. Only
-          enabled for an available default variant. */}
+      {/* Add to Cart bar (M41S2E3, M41S6E-FIX1). Adds a denormalized line to
+          the LOCAL cart via CartContext.addShopifyLine — no Shopify Cart API
+          or checkout. Only enabled for an available selected variant. */}
       <View style={styles.cartBar}>
         {/* Quantity selector */}
         <View style={styles.quantityRow}>
@@ -589,6 +697,46 @@ const styles = StyleSheet.create({
     color: '#388E3C',
   },
   outOfStockLabel: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#D32F2F',
+  },
+
+  // Variant selector
+  optionGroup: {
+    gap: 8,
+  },
+  optionGroupLabel: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#444',
+  },
+  optionChipsRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  optionChip: {
+    backgroundColor: '#fff',
+    borderRadius: 20,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderWidth: 1.5,
+    borderColor: '#E0E0E0',
+  },
+  optionChipActive: {
+    backgroundColor: PINK,
+    borderColor: PINK,
+  },
+  optionChipText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#444',
+  },
+  optionChipTextActive: {
+    color: '#fff',
+  },
+  optionUnavailableText: {
     fontSize: 13,
     fontWeight: '600',
     color: '#D32F2F',
