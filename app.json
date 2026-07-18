@@ -36,14 +36,10 @@
         {
           "backgroundColor": "#FFFFFF",
           "image": "./assets/images/dmv-logo.png",
-          "imageWidth": 180,
-          "dark": {
-            "backgroundColor": "#FFFFFF",
-            "image": "./assets/images/dmv-logo.png",
-            "imageWidth": 180
-          }
+          "imageWidth": 180
         }
-      ]
+      ],
+      "expo-font"
     ],
     "extra": {
       "eas": {
