@@ -10,14 +10,19 @@ import {
   useWindowDimensions,
 } from 'react-native';
 import { router } from 'expo-router';
-import { getFeaturedProducts, getOnSaleProducts, getProductById } from '../../src/data';
-import { Product } from '../../src/data';
-import { fetchCollections } from '../../src/shopify';
-import type { CatalogueCollection } from '../../src/shopify';
-import { ProductCard } from '../../components/products/ProductCard';
+import {
+  fetchCollections,
+  fetchCollectionProducts,
+  fetchNewArrivals,
+  SALE_COLLECTION_HANDLE,
+} from '../../src/shopify';
+import type { CatalogueCollection, CatalogueProduct } from '../../src/shopify';
+import { ShopifyProductCard } from '../../components/products/ShopifyProductCard';
+import { catalogueProductToCardModel } from '../../components/products/productCardModel';
 import { CollectionTile } from '../../components/collections/CollectionTile';
 import { filterCategoryCollections } from '../../components/collections/collectionFilter';
 import { useAsyncData } from '../../components/ui/useAsyncData';
+import { useResolvedProducts } from '../../components/products/useResolvedProducts';
 import { LoadingState, ErrorState, EmptyState } from '../../components/ui/AsyncStates';
 import { homeCategoryColumns, gridItemWidth } from '../../components/ui/grid';
 import { useRecentlyViewed } from '../../src/recentlyViewed/RecentlyViewedContext';
@@ -26,16 +31,19 @@ const DMV_LOGO = require('../../assets/images/dmv-logo.png');
 
 const HOME_SECTION_PADDING = 20;
 const HOME_GRID_GAP = 10;
+const RAIL_CARD_WIDTH = 165;
+const SALE_FETCH_COUNT = 30; // fetch enough to fill the rail after the sale guard
+const SALE_RAIL_COUNT = 10;
 
-// ── Product section (horizontal scroll) ─────────────────────────────────────
+// ── Product rail (horizontal scroll of live Shopify products) ────────────────
 
-function ProductSection({
+function ProductRail({
   title,
   products,
   onSeeAll,
 }: {
   title: string;
-  products: Product[];
+  products: CatalogueProduct[];
   onSeeAll?: () => void;
 }) {
   return (
@@ -54,12 +62,10 @@ function ProductSection({
         contentContainerStyle={styles.productRow}
       >
         {products.map((product) => (
-          <ProductCard
+          <ShopifyProductCard
             key={product.id}
-            product={product}
-            onPress={() => router.push(`/product/${product.id}`)}
-            showFavorite
-            style={{ width: 165 }}
+            model={catalogueProductToCardModel(product)}
+            style={{ width: RAIL_CARD_WIDTH }}
           />
         ))}
       </ScrollView>
@@ -67,23 +73,93 @@ function ProductSection({
   );
 }
 
+// A rail whose data loads asynchronously: renders compact loading / error /
+// empty states and never substitutes placeholder or mock content.
+function AsyncProductRail({
+  title,
+  products,
+  loading,
+  error,
+  onRetry,
+  onSeeAll,
+}: {
+  title: string;
+  products: CatalogueProduct[] | null;
+  loading: boolean;
+  error: string | null;
+  onRetry: () => void;
+  onSeeAll?: () => void;
+}) {
+  return (
+    <View style={styles.section}>
+      <View style={styles.sectionHeader}>
+        <Text style={styles.sectionTitle}>{title}</Text>
+        {onSeeAll && (
+          <Pressable onPress={onSeeAll} hitSlop={8}>
+            <Text style={styles.seeAllText}>See All</Text>
+          </Pressable>
+        )}
+      </View>
+      {loading ? (
+        <LoadingState label={`Loading ${title.toLowerCase()}…`} />
+      ) : error ? (
+        <ErrorState message={error} onRetry={onRetry} />
+      ) : !products || products.length === 0 ? (
+        <EmptyState message="Nothing here yet." />
+      ) : (
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.productRow}
+        >
+          {products.map((product) => (
+            <ShopifyProductCard
+              key={product.id}
+              model={catalogueProductToCardModel(product)}
+              style={{ width: RAIL_CARD_WIDTH }}
+            />
+          ))}
+        </ScrollView>
+      )}
+    </View>
+  );
+}
+
 // ── Home screen ──────────────────────────────────────────────────────────────
 
 export default function HomeScreen() {
-  const newProducts = getFeaturedProducts();
-  const saleProducts = getOnSaleProducts();
   const { width } = useWindowDimensions();
 
-  // Shopify-backed category grid (mock product rails below stay as-is for now).
+  // Shopify-backed category grid.
   const {
     data: collections,
     loading: collectionsLoading,
     error: collectionsError,
     reload: reloadCollections,
   } = useAsyncData<CatalogueCollection[]>(async () => {
-    // First page only in M41S2B2; cursor pagination deferred to M41S2C.
     const page = await fetchCollections({ first: 50 });
     return filterCategoryCollections(page.items).included;
+  }, []);
+
+  // New Arrivals — newest products (CREATED_AT desc), first 10.
+  const {
+    data: newArrivals,
+    loading: newLoading,
+    error: newError,
+    reload: reloadNew,
+  } = useAsyncData<CatalogueProduct[]>(() => fetchNewArrivals(SALE_RAIL_COUNT), []);
+
+  // On Sale — from the app-on-sale collection, with the exact same-variant sale
+  // guard applied client-side (omit anything not provably discounted). Collection
+  // ordering is preserved (owner decision v1).
+  const {
+    data: onSale,
+    loading: saleLoading,
+    error: saleError,
+    reload: reloadSale,
+  } = useAsyncData<CatalogueProduct[]>(async () => {
+    const page = await fetchCollectionProducts(SALE_COLLECTION_HANDLE, { first: SALE_FETCH_COUNT });
+    return page.items.filter((p) => p.isOnSale).slice(0, SALE_RAIL_COUNT);
   }, []);
 
   const columns = homeCategoryColumns(width);
@@ -94,10 +170,16 @@ export default function HomeScreen() {
     ? allCollections
     : allCollections.slice(0, columns);
 
-  const { recentProductIds, hydrated } = useRecentlyViewed();
-  const recentProducts = recentProductIds
-    .map((id) => getProductById(id))
-    .filter((p): p is Product => p != null);
+  // Recently Viewed — resolve persisted Shopify GIDs to live products; hide the
+  // rail on a network failure rather than breaking Home.
+  const { recent, hydrated: recentHydrated, pruneRecentlyViewed } = useRecentlyViewed();
+  const { state: recentState } = useResolvedProducts(
+    recent.map((r) => r.gid),
+    pruneRecentlyViewed,
+  );
+  const recentProducts =
+    recentState.status === 'ready' ? recentState.products : [];
+  const showRecent = recentHydrated && recentState.status === 'ready' && recentProducts.length > 0;
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -161,19 +243,26 @@ export default function HomeScreen() {
         </View>
 
         {/* New arrivals */}
-        <ProductSection title="New Arrivals" products={newProducts} />
+        <AsyncProductRail
+          title="New Arrivals"
+          products={newArrivals}
+          loading={newLoading}
+          error={newError}
+          onRetry={reloadNew}
+        />
 
         {/* On sale */}
-        <ProductSection
+        <AsyncProductRail
           title="On Sale"
-          products={saleProducts}
+          products={onSale}
+          loading={saleLoading}
+          error={saleError}
+          onRetry={reloadSale}
           onSeeAll={() => router.push('/promotions')}
         />
 
-        {/* Recently viewed — only shown after hydration when history exists */}
-        {hydrated && recentProducts.length > 0 && (
-          <ProductSection title="Recently Viewed" products={recentProducts} />
-        )}
+        {/* Recently viewed — only shown after a successful resolve with history */}
+        {showRecent && <ProductRail title="Recently Viewed" products={recentProducts} />}
       </ScrollView>
     </SafeAreaView>
   );

@@ -18,12 +18,17 @@ export {
   fetchCollections,
   fetchCollectionProducts,
   fetchProductByHandle,
+  fetchNewArrivals,
+  resolveProductsByGids,
   searchCatalogueProducts,
+  SALE_COLLECTION_HANDLE,
 } from './catalogue';
+export type { ResolvedProductNode } from './catalogue';
 export type {
   Money,
   ProductImage,
   ProductVariant,
+  RepresentativeVariant,
   CatalogueProduct,
   CatalogueCollection,
   CollectionSortOption,

@@ -16,8 +16,8 @@ import type {
   CatalogueCollection,
   CollectionSortOption,
 } from '../../src/shopify';
-import { ProductCard } from '../../components/products/ProductCard';
-import { catalogueProductToCardProduct } from '../../components/products/catalogueCardAdapter';
+import { ShopifyProductCard } from '../../components/products/ShopifyProductCard';
+import { catalogueProductToCardModel } from '../../components/products/productCardModel';
 import {
   CollectionSortSheet,
   COLLECTION_SORT_LABELS,
@@ -183,22 +183,12 @@ export default function CategoryScreen() {
             />
           }
           renderItem={({ item }) => (
-            <ProductCard
-              product={catalogueProductToCardProduct(item)}
-              // Open the Shopify-aware detail route keyed by the product *handle*
-              // (not the GID), matching the collection route's handle convention.
-              // Guard the handle: without a valid, non-empty one the detail route
-              // (fetchProductByHandle) has nothing to look up, so the card stays a
-              // no-op rather than pushing to a broken /product/shopify/ path.
-              onPress={
-                item.handle?.trim()
-                  ? () => router.push(`/product/shopify/${item.handle}`)
-                  : undefined
-              }
-              // Display-only: Shopify-backed cards never write to cart/favorites.
-              displayOnly
+            // ShopifyProductCard wires favorite + Quick Add and opens the
+            // Shopify-aware detail route keyed by the product *handle* (a missing
+            // handle makes the card a no-op rather than a broken push).
+            <ShopifyProductCard
+              model={catalogueProductToCardModel(item)}
               imageHeight={140}
-              imageAltText={item.featuredImage?.altText ?? undefined}
               style={{ width: itemWidth, marginBottom: GRID_GAP }}
             />
           )}

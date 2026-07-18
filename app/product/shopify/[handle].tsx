@@ -1,13 +1,13 @@
-// Shopify-aware product detail route, keyed by product handle (M41S2E1/E3).
+// Shopify product detail route, keyed by product handle (M41S2E1/E3, M41S6E).
 //
-// Reached from Shopify-backed category cards. It hydrates from the catalogue
-// cache, refreshes via fetchProductByHandle, and renders detail for the default
-// variant only. Add to Cart adds a fully denormalized line to the LOCAL cart via
-// CartContext.addShopifyLine (M41S2E2 API) — no Shopify Cart API, checkout, or
-// payment. The button enables only for an available default variant.
-//
-// The mock detail route (app/product/[productId].tsx) is untouched and still
-// serves Home/Search/Favorites/Promotions mock-backed flows.
+// The sole product detail route in the app. Reached from every product surface
+// (Home, Search, Promotions, Favorites, Recently Viewed, category listing). It
+// hydrates from the catalogue cache, refreshes via fetchProductByHandle, and
+// renders detail for the default variant. Add to Cart adds a fully denormalized
+// line to the LOCAL Shopify cart via CartContext.addShopifyLine — no Shopify
+// Cart API, checkout, or payment here. The button enables only for an available
+// default variant. A successful resolve records Recently Viewed (v2) and the
+// header favorite toggles by product GID.
 
 import { useEffect, useRef, useState } from 'react';
 import {
@@ -34,6 +34,8 @@ import type {
 import { LoadingState, ErrorState } from '../../../components/ui/AsyncStates';
 import { useCart } from '../../../src/cart/CartContext';
 import type { ShopifyCartLineInput } from '../../../src/cart/CartContext';
+import { useFavorites } from '../../../src/favorites/FavoritesContext';
+import { useRecentlyViewed } from '../../../src/recentlyViewed/RecentlyViewedContext';
 
 const PINK = '#D81B60';
 
@@ -81,9 +83,10 @@ export default function ShopifyProductDetailScreen() {
   const { handle } = useLocalSearchParams<{ handle: string }>();
   const { width } = useWindowDimensions();
   const { addShopifyLine } = useCart();
+  const { isFavorite, toggleFavorite } = useFavorites();
+  const { recordRecentlyViewed } = useRecentlyViewed();
 
-  // Local quantity (never below 1) and a transient "added" confirmation, mirroring
-  // the mock detail screen's add-to-cart UX.
+  // Local quantity (never below 1) and a transient "added" confirmation.
   const [qty, setQty] = useState(1);
   const [showConfirm, setShowConfirm] = useState(false);
   const confirmTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -122,6 +125,9 @@ export default function ShopifyProductDetailScreen() {
           setNotFound(true);
         } else {
           setProduct(fetched);
+          // Record in Recently Viewed only after a successful Shopify resolve,
+          // using the fresh GID + handle (Recently Viewed v2 identity).
+          recordRecentlyViewed({ gid: fetched.id, handle: fetched.handle });
         }
       } catch (e) {
         if (cancelled) return;
@@ -140,15 +146,15 @@ export default function ShopifyProductDetailScreen() {
     setReloadKey((k) => k + 1);
   };
 
-  // Header shared by the content and the fallback states so Back is always
-  // available. Mirrors the mock detail / category header (icon + hitSlop).
+  // Header shared by the fallback states so Back is always available. Matches the
+  // category header (icon + hitSlop).
   const header = (title: string) => (
     <View style={styles.header}>
       <Pressable
         style={styles.backBtn}
         onPress={() => router.back()}
         // Icon is visually small; extend the touch target toward 44pt
-        // (matches the category and mock product screens).
+        // (matches the category screen).
         hitSlop={10}
         accessibilityRole="button"
         accessibilityLabel="Go back"
@@ -258,9 +264,43 @@ export default function ShopifyProductDetailScreen() {
     confirmTimer.current = setTimeout(() => setShowConfirm(false), 2000);
   };
 
+  const favorited = isFavorite(product.id);
+
   return (
     <SafeAreaView style={styles.safeArea}>
-      {header(product.title)}
+      {/* Content header: back + title + favorite (by Shopify GID). */}
+      <View style={styles.header}>
+        <Pressable
+          style={styles.backBtn}
+          onPress={() => router.back()}
+          hitSlop={10}
+          accessibilityRole="button"
+          accessibilityLabel="Go back"
+        >
+          <Ionicons name="chevron-back" size={24} color={PINK} />
+        </Pressable>
+        <Text style={styles.headerTitle} numberOfLines={1}>
+          {product.title}
+        </Text>
+        <Pressable
+          style={styles.heartBtn}
+          onPress={() => toggleFavorite({ gid: product.id, handle: product.handle })}
+          hitSlop={10}
+          accessibilityRole="button"
+          accessibilityLabel={
+            favorited
+              ? `Remove ${product.title} from favorites`
+              : `Add ${product.title} to favorites`
+          }
+          accessibilityState={{ selected: favorited }}
+        >
+          <Ionicons
+            name={favorited ? 'heart' : 'heart-outline'}
+            size={24}
+            color={favorited ? PINK : '#999'}
+          />
+        </Pressable>
+      </View>
 
       <ScrollView
         style={styles.scroll}
@@ -439,6 +479,9 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: '#222',
   },
+  heartBtn: {
+    padding: 4,
+  },
 
   // Scroll
   scroll: {
@@ -590,7 +633,7 @@ const styles = StyleSheet.create({
     paddingTop: 12,
     paddingBottom: 14,
   },
-  // Quantity selector (mirrors the mock product detail stepper).
+  // Quantity selector.
   quantityRow: {
     flexDirection: 'row',
     alignItems: 'center',

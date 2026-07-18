@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback } from 'react';
+import { useMemo, useState, useCallback } from 'react';
 import {
   FlatList,
   View,
@@ -7,70 +7,70 @@ import {
   SafeAreaView,
   Pressable,
   ScrollView,
+  useWindowDimensions,
 } from 'react-native';
 import { router } from 'expo-router';
 import Ionicons from '@expo/vector-icons/Ionicons';
-import { getOnSaleProducts } from '../src/data';
-import { Product } from '../src/data';
-import { ProductCard } from '../components/products/ProductCard';
+import { fetchCollectionProducts, SALE_COLLECTION_HANDLE } from '../src/shopify';
+import type { CatalogueProduct } from '../src/shopify';
+import { ShopifyProductCard } from '../components/products/ShopifyProductCard';
+import { catalogueProductToCardModel } from '../components/products/productCardModel';
+import { usePagedData } from '../components/ui/usePagedData';
+import { LoadingState, ErrorState, EmptyState, LoadMoreFooter } from '../components/ui/AsyncStates';
+import { productGridColumns, gridItemWidth } from '../components/ui/grid';
 
 const PINK = '#D81B60';
 const PINK_LIGHT = '#FCE4EC';
+const PAGE_SIZE = 50; // large first page so the sale guard still fills the screen
+const SCREEN_PADDING = 16;
+const GRID_GAP = 12;
 
-type FilterKey = 'all' | 'cat-01' | 'cat-02' | 'cat-06' | 'cat-03';
-
-const FILTER_CHIPS: { key: FilterKey; label: string }[] = [
-  { key: 'all', label: 'All Deals' },
-  { key: 'cat-01', label: 'Gel' },
-  { key: 'cat-02', label: 'Acrylic' },
-  { key: 'cat-06', label: 'Glitter' },
-  { key: 'cat-03', label: 'Tools' },
-];
+const ALL_DEALS = 'all';
 
 type HeaderProps = {
-  activeFilter: FilterKey;
-  onFilterChange: (k: FilterKey) => void;
+  filters: string[]; // productType values, dynamically derived from live data
+  activeFilter: string;
+  onFilterChange: (k: string) => void;
   dealCount: number;
 };
 
-function PromotionsHeader({ activeFilter, onFilterChange, dealCount }: HeaderProps) {
+function PromotionsHeader({ filters, activeFilter, onFilterChange, dealCount }: HeaderProps) {
   return (
     <View>
       {/* Hero */}
       <View style={styles.hero}>
         <Text style={styles.heroTitle}>Nail Deals</Text>
-        <Text style={styles.heroSubtitle}>Fresh savings on salon favorites.</Text>
+        <Text style={styles.heroSubtitle}>Current savings from our sale collection.</Text>
       </View>
 
-      {/* Promo banner */}
+      {/* Promo banner — neutral copy, no percentage claims */}
       <View style={styles.banner}>
         <Text style={styles.bannerEmoji}>🏷️</Text>
         <View style={styles.bannerBody}>
-          <Text style={styles.bannerTitle}>This Week's Picks</Text>
+          <Text style={styles.bannerTitle}>On Sale Now</Text>
           <Text style={styles.bannerDesc}>
-            Up to 40% off salon essentials — new deals added weekly.
+            Products currently marked down from their regular price.
           </Text>
         </View>
       </View>
 
-      {/* Filter chips */}
+      {/* Filter chips: All Deals + live product types */}
       <ScrollView
         horizontal
         showsHorizontalScrollIndicator={false}
         contentContainerStyle={styles.filtersRow}
         style={styles.filtersScroll}
       >
-        {FILTER_CHIPS.map((chip) => {
-          const active = chip.key === activeFilter;
+        {[ALL_DEALS, ...filters].map((key) => {
+          const active = key === activeFilter;
+          const label = key === ALL_DEALS ? 'All Deals' : key;
           return (
             <Pressable
-              key={chip.key}
+              key={key}
               style={[styles.chip, active && styles.chipActive]}
-              onPress={() => onFilterChange(chip.key)}
+              onPress={() => onFilterChange(key)}
             >
-              <Text style={[styles.chipText, active && styles.chipTextActive]}>
-                {chip.label}
-              </Text>
+              <Text style={[styles.chipText, active && styles.chipTextActive]}>{label}</Text>
             </Pressable>
           );
         })}
@@ -81,7 +81,9 @@ function PromotionsHeader({ activeFilter, onFilterChange, dealCount }: HeaderPro
         <Text style={styles.sectionLabel}>Sale Products</Text>
         {dealCount > 0 && (
           <View style={styles.countBadge}>
-            <Text style={styles.countBadgeText}>{dealCount} deals</Text>
+            <Text style={styles.countBadgeText}>
+              {dealCount} {dealCount === 1 ? 'deal' : 'deals'}
+            </Text>
           </View>
         )}
       </View>
@@ -89,36 +91,66 @@ function PromotionsHeader({ activeFilter, onFilterChange, dealCount }: HeaderPro
   );
 }
 
-function savingsAmount(p: Product): number {
-  if (p.originalPrice == null) return 0;
-  return p.originalPrice - p.price;
-}
-
 export default function PromotionsScreen() {
-  const [activeFilter, setActiveFilter] = useState<FilterKey>('all');
+  const { width } = useWindowDimensions();
+  const [activeFilter, setActiveFilter] = useState<string>(ALL_DEALS);
 
-  const allSaleProducts = useMemo(
-    () => getOnSaleProducts().slice().sort((a, b) => savingsAmount(b) - savingsAmount(a)),
-    [],
-  );
+  // Load app-on-sale pages; apply the exact same-variant sale guard per page so
+  // only provably-discounted products appear. Collection ordering is preserved.
+  const {
+    items,
+    loading,
+    error,
+    loadingMore,
+    pageError,
+    hasMore,
+    reload,
+    loadMore,
+    retryLoadMore,
+  } = usePagedData<CatalogueProduct, null>(async (cursor) => {
+    const page = await fetchCollectionProducts(SALE_COLLECTION_HANDLE, {
+      first: PAGE_SIZE,
+      after: cursor,
+    });
+    return {
+      items: page.items.filter((p) => p.isOnSale),
+      hasNextPage: page.pageInfo.hasNextPage,
+      endCursor: page.pageInfo.endCursor,
+      meta: null,
+    };
+  }, []);
 
-  const filteredProducts = useMemo(
+  // Facet chips derived from the product types observed in the loaded sale items.
+  const productTypes = useMemo(() => {
+    const set = new Set<string>();
+    for (const p of items) {
+      const t = p.productType?.trim();
+      if (t) set.add(t);
+    }
+    return Array.from(set).sort((a, b) => a.localeCompare(b));
+  }, [items]);
+
+  const filteredItems = useMemo(
     () =>
-      activeFilter === 'all'
-        ? allSaleProducts
-        : allSaleProducts.filter((p) => p.categoryId === activeFilter),
-    [allSaleProducts, activeFilter],
+      activeFilter === ALL_DEALS
+        ? items
+        : items.filter((p) => p.productType === activeFilter),
+    [items, activeFilter],
   );
+
+  const columns = productGridColumns(width);
+  const itemWidth = gridItemWidth(width, columns, SCREEN_PADDING, GRID_GAP);
 
   const renderHeader = useCallback(
     () => (
       <PromotionsHeader
+        filters={productTypes}
         activeFilter={activeFilter}
         onFilterChange={setActiveFilter}
-        dealCount={filteredProducts.length}
+        dealCount={filteredItems.length}
       />
     ),
-    [activeFilter, filteredProducts.length],
+    [productTypes, activeFilter, filteredItems.length],
   );
 
   return (
@@ -132,32 +164,43 @@ export default function PromotionsScreen() {
         <View style={styles.navSpacer} />
       </View>
 
-      <FlatList
-        data={filteredProducts}
-        keyExtractor={(item) => item.id}
-        numColumns={2}
-        contentContainerStyle={styles.grid}
-        columnWrapperStyle={styles.columnWrapper}
-        showsVerticalScrollIndicator={false}
-        ListHeaderComponent={renderHeader}
-        renderItem={({ item }) => (
-          <ProductCard
-            product={item}
-            onPress={() => router.push(`/product/${item.id}`)}
-            showFavorite
-            style={styles.card}
-          />
-        )}
-        ListEmptyComponent={
-          <View style={styles.emptyState}>
-            <Text style={styles.emptyIcon}>🏷️</Text>
-            <Text style={styles.emptyTitle}>No deals right now</Text>
-            <Text style={styles.emptySubtitle}>
-              Check back soon for new nail supply specials.
-            </Text>
-          </View>
-        }
-      />
+      {loading ? (
+        <LoadingState label="Loading deals…" />
+      ) : error ? (
+        <ErrorState message={error} onRetry={reload} />
+      ) : items.length === 0 ? (
+        <ScrollView>
+          {renderHeader()}
+          <EmptyState message="No deals right now. Check back soon for new nail supply specials." />
+        </ScrollView>
+      ) : (
+        <FlatList<CatalogueProduct>
+          key={columns}
+          data={filteredItems}
+          keyExtractor={(item) => item.id}
+          numColumns={columns}
+          contentContainerStyle={styles.grid}
+          columnWrapperStyle={columns > 1 ? styles.columnWrapper : undefined}
+          showsVerticalScrollIndicator={false}
+          ListHeaderComponent={renderHeader}
+          onEndReached={loadMore}
+          onEndReachedThreshold={0.4}
+          ListFooterComponent={
+            <LoadMoreFooter
+              loadingMore={loadingMore}
+              pageError={pageError}
+              hasMore={hasMore}
+              onRetry={retryLoadMore}
+            />
+          }
+          renderItem={({ item }) => (
+            <ShopifyProductCard
+              model={catalogueProductToCardModel(item)}
+              style={{ width: itemWidth, marginTop: GRID_GAP }}
+            />
+          )}
+        />
+      )}
     </SafeAreaView>
   );
 }
@@ -307,34 +350,5 @@ const styles = StyleSheet.create({
   },
   columnWrapper: {
     gap: 12,
-    marginTop: 12,
-  },
-  card: {
-    flex: 1,
-  },
-
-  // Empty state
-  emptyState: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingTop: 60,
-    paddingHorizontal: 32,
-  },
-  emptyIcon: {
-    fontSize: 48,
-    marginBottom: 16,
-  },
-  emptyTitle: {
-    fontSize: 17,
-    fontWeight: '700',
-    color: '#333',
-    marginBottom: 8,
-    textAlign: 'center',
-  },
-  emptySubtitle: {
-    fontSize: 14,
-    color: '#888',
-    textAlign: 'center',
-    lineHeight: 20,
   },
 });

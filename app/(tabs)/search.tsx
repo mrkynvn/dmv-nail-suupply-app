@@ -6,25 +6,71 @@ import {
   StyleSheet,
   SafeAreaView,
   Pressable,
+  useWindowDimensions,
 } from 'react-native';
-import { useState } from 'react';
-import { router } from 'expo-router';
+import { useEffect, useState } from 'react';
 import Ionicons from '@expo/vector-icons/Ionicons';
-import { categories, searchProducts } from '../../src/data';
-import { Product } from '../../src/data/types';
-import { ProductCard } from '../../components/products/ProductCard';
+import { searchCatalogueProducts } from '../../src/shopify';
+import type { CatalogueProduct } from '../../src/shopify';
+import { ShopifyProductCard } from '../../components/products/ShopifyProductCard';
+import { catalogueProductToCardModel } from '../../components/products/productCardModel';
+import { usePagedData } from '../../components/ui/usePagedData';
+import { LoadingState, ErrorState, LoadMoreFooter } from '../../components/ui/AsyncStates';
+import { productGridColumns, gridItemWidth } from '../../components/ui/grid';
 
 const PINK = '#D81B60';
+const PAGE_SIZE = 24;
+const DEBOUNCE_MS = 300;
+const SCREEN_PADDING = 16;
+const GRID_GAP = 12;
 
-const CHIPS = ['Gel', 'Lamp', 'Glitter', 'Acrylic', 'DND', 'Tools'];
+// Chip vocabulary validated against live store data (M41S6E): each term returns
+// real Storefront results. They act as real query setters.
+const CHIPS = ['Gel', 'Polish', 'Powder', 'Lamp', 'Wax', 'Pedicure', 'Gloves', 'DND'];
 
 export default function SearchScreen() {
+  const { width } = useWindowDimensions();
   const [query, setQuery] = useState('');
+  const [debounced, setDebounced] = useState('');
 
-  const results = searchProducts(query);
-  const hasQuery = query.trim().length > 0;
+  // Debounce the raw input; the paged fetch keys off `debounced` so only the
+  // latest settled query drives a request (latest-query-wins via usePagedData's
+  // generation guard + deps reset).
+  useEffect(() => {
+    const t = setTimeout(() => setDebounced(query), DEBOUNCE_MS);
+    return () => clearTimeout(t);
+  }, [query]);
 
-  const categoryById = new Map(categories.map((c) => [c.id, c]));
+  const {
+    items,
+    loading,
+    error,
+    loadingMore,
+    pageError,
+    hasMore,
+    reload,
+    loadMore,
+    retryLoadMore,
+  } = usePagedData<CatalogueProduct, null>(async (cursor) => {
+    const q = debounced.trim();
+    if (!q) return { items: [], hasNextPage: false, endCursor: null, meta: null };
+    const page = await searchCatalogueProducts(q, { first: PAGE_SIZE, after: cursor });
+    return {
+      items: page.items,
+      hasNextPage: page.pageInfo.hasNextPage,
+      endCursor: page.pageInfo.endCursor,
+      meta: null,
+    };
+  }, [debounced]);
+
+  const trimmed = debounced.trim();
+  const hasQuery = trimmed.length > 0;
+  const columns = productGridColumns(width);
+  const itemWidth = gridItemWidth(width, columns, SCREEN_PADDING, GRID_GAP);
+  const count = items.length;
+  // When more pages remain we cannot claim the exact total, so show "N+". Once
+  // exhausted, `count` is the true number of matches.
+  const countLabel = `${count}${hasMore ? '+' : ''} ${count === 1 && !hasMore ? 'result' : 'results'} for "${trimmed}"`;
 
   return (
     <SafeAreaView style={styles.safe}>
@@ -52,47 +98,50 @@ export default function SearchScreen() {
         />
       </View>
 
-      <FlatList<Product>
-        data={hasQuery ? results : []}
-        keyExtractor={(item) => item.id}
-        keyboardShouldPersistTaps="handled"
-        contentContainerStyle={styles.listContent}
-        ListHeaderComponent={
-          hasQuery ? (
-            results.length > 0 ? (
-              <Text style={styles.resultCount}>
-                {results.length} {results.length === 1 ? 'result' : 'results'} for "{query.trim()}"
-              </Text>
-            ) : null
-          ) : (
-            <DefaultState onChipPress={setQuery} />
-          )
-        }
-        ListEmptyComponent={
-          hasQuery ? (
-            <View style={styles.emptyWrap}>
-              <Ionicons name="search-outline" size={40} color="#DDD" />
-              <Text style={styles.emptyTitle}>No products found</Text>
-              <Text style={styles.emptySubtitle}>
-                Try another keyword or check the category list.
-              </Text>
-            </View>
-          ) : null
-        }
-        renderItem={({ item }) => {
-          const cat = categoryById.get(item.categoryId);
-          return (
-            <ProductCard
-              product={item}
-              onPress={() => router.push(`/product/${item.id}`)}
-              showFavorite
-              imageHeight={140}
-              categoryLabel={cat ? `${cat.icon} ${cat.name}` : undefined}
-              style={styles.searchCard}
+      {!hasQuery ? (
+        <DefaultState onChipPress={setQuery} />
+      ) : loading ? (
+        <LoadingState label="Searching…" />
+      ) : error ? (
+        <ErrorState message={error} onRetry={reload} />
+      ) : count === 0 ? (
+        <View style={styles.emptyWrap}>
+          <Ionicons name="search-outline" size={40} color="#DDD" />
+          <Text style={styles.emptyTitle}>No products found</Text>
+          <Text style={styles.emptySubtitle}>
+            Try another keyword or check the category list.
+          </Text>
+        </View>
+      ) : (
+        <FlatList<CatalogueProduct>
+          key={columns}
+          data={items}
+          numColumns={columns}
+          keyExtractor={(item) => item.id}
+          keyboardShouldPersistTaps="handled"
+          contentContainerStyle={styles.listContent}
+          columnWrapperStyle={columns > 1 ? { gap: GRID_GAP } : undefined}
+          showsVerticalScrollIndicator={false}
+          onEndReached={loadMore}
+          onEndReachedThreshold={0.4}
+          ListHeaderComponent={<Text style={styles.resultCount}>{countLabel}</Text>}
+          ListFooterComponent={
+            <LoadMoreFooter
+              loadingMore={loadingMore}
+              pageError={pageError}
+              hasMore={hasMore}
+              onRetry={retryLoadMore}
             />
-          );
-        }}
-      />
+          }
+          renderItem={({ item }) => (
+            <ShopifyProductCard
+              model={catalogueProductToCardModel(item)}
+              imageHeight={140}
+              style={{ width: itemWidth, marginBottom: GRID_GAP }}
+            />
+          )}
+        />
+      )}
     </SafeAreaView>
   );
 }
@@ -103,15 +152,11 @@ function DefaultState({ onChipPress }: { onChipPress: (q: string) => void }) {
       <Ionicons name="search-outline" size={36} color="#DDD" />
       <Text style={styles.defaultTitle}>Start searching</Text>
       <Text style={styles.defaultSubtitle}>
-        Try searching for gel, lamp, glitter, acrylic, DND, or Kiara Sky.
+        Try gel, polish, powder, lamp, wax, pedicure, gloves, or DND.
       </Text>
       <View style={styles.chipsRow}>
         {CHIPS.map((chip) => (
-          <Pressable
-            key={chip}
-            style={styles.chip}
-            onPress={() => onChipPress(chip)}
-          >
+          <Pressable key={chip} style={styles.chip} onPress={() => onChipPress(chip)}>
             <Text style={styles.chipText}>{chip}</Text>
           </Pressable>
         ))}
@@ -177,11 +222,6 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '600',
     color: '#888',
-    marginBottom: 12,
-  },
-
-  // Search result card wrapper (spacing between items)
-  searchCard: {
     marginBottom: 12,
   },
 

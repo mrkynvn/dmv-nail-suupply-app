@@ -6,9 +6,11 @@
 // keeps GraphQL-specific quirks (string money, price ranges) out of the app.
 
 import type {
+  RawCardVariant,
   RawCollection,
   RawImage,
   RawMoney,
+  RawNode,
   RawPageInfo,
   RawProductCard,
   RawProductDetail,
@@ -21,6 +23,7 @@ import type {
   PageInfo,
   ProductImage,
   ProductVariant,
+  RepresentativeVariant,
 } from './catalogueTypes';
 
 // Parse a Storefront decimal-string amount into a number, defaulting a missing
@@ -61,14 +64,44 @@ export function adaptVariant(raw: RawVariant): ProductVariant {
   };
 }
 
+// Normalize the representative variant (selectedOrFirstAvailableVariant), or
+// null when the product has no variant at all.
+export function adaptRepresentativeVariant(
+  raw: RawCardVariant | null
+): RepresentativeVariant | null {
+  if (!raw) return null;
+  return {
+    id: raw.id,
+    title: raw.title,
+    availableForSale: raw.availableForSale,
+    price: parseMoney(raw.price),
+    compareAtPrice: raw.compareAtPrice ? parseMoney(raw.compareAtPrice) : null,
+  };
+}
+
+// Provable, displayable discount from a SINGLE variant: the representative
+// variant's compare-at must exist, strictly exceed its own price, and share the
+// same currency. This never uses priceRange vs compareAtPriceRange minima (which
+// can come from different variants and falsely flag a sale). Returns the
+// compare-at Money to display when on sale, else null.
+export function representativeSaleCompareAt(
+  rv: RepresentativeVariant | null
+): Money | null {
+  if (!rv || !rv.compareAtPrice) return null;
+  const coherent = rv.compareAtPrice.currencyCode === rv.price.currencyCode;
+  if (!coherent) return null;
+  return rv.compareAtPrice.amount > rv.price.amount ? rv.compareAtPrice : null;
+}
+
 // Shared normalization of the fields common to card and detail products.
 // `variants`/`hasVariantDetail` are filled in by the specific adapters.
 function adaptProductBase(raw: RawProductCard): Omit<CatalogueProduct, 'variants' | 'hasVariantDetail' | 'defaultVariantId' | 'images'> {
   const minPrice = parseMoney(raw.priceRange.minVariantPrice);
-  const compareAtMin = parseMoney(raw.compareAtPriceRange.minVariantPrice);
-  // A genuine discount: a compare-at price that exceeds the selling price.
-  // Shopify returns 0 for compare-at when none is set, so `>` guards both cases.
-  const isOnSale = compareAtMin.amount > minPrice.amount;
+  const representativeVariant = adaptRepresentativeVariant(raw.selectedOrFirstAvailableVariant);
+  // Sale is proven from the representative variant only (same-variant, currency
+  // coherent) — NOT from priceRange/compareAtPriceRange minima.
+  const compareAtPrice = representativeSaleCompareAt(representativeVariant);
+  const isOnSale = compareAtPrice !== null;
 
   return {
     id: raw.id,
@@ -81,9 +114,14 @@ function adaptProductBase(raw: RawProductCard): Omit<CatalogueProduct, 'variants
     featuredImage: adaptImage(raw.featuredImage),
     minPrice,
     maxPrice: parseMoney(raw.priceRange.maxVariantPrice),
-    compareAtPrice: isOnSale ? compareAtMin : null,
+    compareAtPrice,
     isOnSale,
     availableForSale: raw.availableForSale,
+    createdAt: raw.createdAt ?? null,
+    // A count is trustworthy only at EXACT precision; AT_LEAST is a floor.
+    variantCount: raw.variantsCount?.count ?? 0,
+    variantCountExact: raw.variantsCount?.precision === 'EXACT',
+    representativeVariant,
     updatedAt: raw.updatedAt ?? null,
   };
 }
@@ -130,6 +168,37 @@ function adaptCollectionAppIcon(raw: RawCollection['appIcon']): ProductImage | n
     width: image.width ?? null,
     height: image.height ?? null,
   };
+}
+
+// One resolved entry from a bulk GID lookup: the requested gid and its product,
+// or null when the id was deleted/unpublished/not a Product. Callers use the
+// null to prune stale persisted identities.
+export interface ResolvedProductNode {
+  gid: string;
+  product: CatalogueProduct | null;
+}
+
+// Narrow a Node union member to a real Product node (has __typename 'Product'
+// and the card fields). The `'handle' in node` check discriminates a Product
+// from a bare `{ __typename }` element the union permits.
+function isProductNode(node: RawNode): node is RawProductCard & { __typename: 'Product' } {
+  return node !== null && node.__typename === 'Product' && 'handle' in node;
+}
+
+// Adapt a `nodes(ids:)` response, positionally aligned with the requested ids so
+// the caller's order is preserved. Non-Product / null nodes become { product:
+// null }. Never throws on a null element.
+export function adaptProductNodes(
+  ids: string[],
+  nodes: RawNode[]
+): ResolvedProductNode[] {
+  return ids.map((gid, i) => {
+    const node = nodes[i];
+    if (isProductNode(node)) {
+      return { gid, product: adaptProductCard(node) };
+    }
+    return { gid, product: null };
+  });
 }
 
 export function adaptCollection(raw: RawCollection): CatalogueCollection {

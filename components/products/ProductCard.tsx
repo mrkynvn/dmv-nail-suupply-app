@@ -1,57 +1,67 @@
 import { useState } from 'react';
 import { View, Text, StyleSheet, Pressable, Image, StyleProp, ViewStyle } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
-import { Product } from '../../src/data/types';
-import { useFavorites } from '../../src/favorites/FavoritesContext';
-import { useCart } from '../../src/cart/CartContext';
+import type { ProductCardModel } from './productCardModel';
+
+// Pure presentation product card (M41S6E).
+//
+// It renders a neutral ProductCardModel and delegates every action through
+// callbacks. It imports no data layer, no favorites/cart context, and no
+// GraphQL shapes — the ShopifyProductCard wrapper wires those in. Quick-add
+// behavior is driven entirely by `model.quickAdd.kind`.
 
 const PINK = '#D81B60';
 
 type ProductCardProps = {
-  product: Product;
-  // Optional so a card can be a deliberate no-op (e.g. a Shopify card missing a
-  // valid handle): with no handler the Pressable renders but does not navigate.
+  model: ProductCardModel;
+  // Optional so a card can be a deliberate no-op (e.g. missing a valid handle):
+  // with no handler the Pressable renders but does not navigate.
   onPress?: () => void;
   showFavorite?: boolean;
+  favorited?: boolean;
+  onToggleFavorite?: () => void;
   showQuickAdd?: boolean;
+  // Invoked when the quick-add control is pressed for an `add` or `openDetail`
+  // descriptor. Never called for a `disabled` descriptor.
+  onQuickAdd?: () => void;
   categoryLabel?: string;
   imageHeight?: number;
   style?: StyleProp<ViewStyle>;
-  // Explicit alt text for the product image; falls back to the product name.
-  imageAltText?: string;
-  // Display-only mode for Shopify-backed cards: suppresses the favorite and
-  // quick-add controls so such cards never write to cart/favorites (those
-  // stores are still mock-id based until a later migration milestone).
-  displayOnly?: boolean;
 };
 
+function formatPrice(amount: number, currencyCode: string): string {
+  return currencyCode === 'USD' ? `$${amount.toFixed(2)}` : `${amount.toFixed(2)} ${currencyCode}`;
+}
+
 export function ProductCard({
-  product,
+  model,
   onPress,
   showFavorite = false,
+  favorited = false,
+  onToggleFavorite,
   showQuickAdd = true,
+  onQuickAdd,
   categoryLabel,
   imageHeight = 150,
   style,
-  imageAltText,
-  displayOnly = false,
 }: ProductCardProps) {
-  const { isFavorite, toggleFavorite } = useFavorites();
-  const { addToCart } = useCart();
-  const favorited = isFavorite(product.id);
-  const outOfStock = !product.inStock;
+  const outOfStock = !model.available;
 
   // Track the URI that failed to load (rather than a bare boolean) so a card
   // recycled by a list for a different product doesn't inherit a stale error.
   const [erroredUri, setErroredUri] = useState<string | null>(null);
-  const isRemoteImage = /^https?:\/\//i.test(product.imageUrl);
-  const showImage = isRemoteImage && erroredUri !== product.imageUrl;
+  const imageUri = model.imageUrl ?? '';
+  const isRemoteImage = /^https?:\/\//i.test(imageUri);
+  const showImage = isRemoteImage && erroredUri !== imageUri;
   const imageLabel =
-    imageAltText && imageAltText.trim().length > 0 ? imageAltText : product.name;
+    model.imageAltText && model.imageAltText.trim().length > 0 ? model.imageAltText : model.name;
 
-  // Display-only Shopify cards render neither control regardless of caller flags.
-  const showFav = showFavorite && !displayOnly;
-  const showAdd = showQuickAdd && !displayOnly;
+  const quickAddKind = model.quickAdd.kind;
+  const showFav = showFavorite && !!onToggleFavorite;
+  const showAdd = showQuickAdd;
+  // The quick-add control is inert for a `disabled` descriptor or when out of
+  // stock. `add`/`openDetail` invoke the provided callback.
+  const quickAddDisabled = quickAddKind === 'disabled' || outOfStock;
 
   return (
     <Pressable
@@ -60,28 +70,23 @@ export function ProductCard({
     >
       {/* Image area */}
       <View style={[styles.imageArea, { height: imageHeight }]}>
-        {/* Real product image (remote URLs only); on error or for mock
-            `placeholder:*` values it is omitted and the colored area shows. */}
+        {/* Real product image (remote URLs only); on error or when Shopify has no
+            image the colored area shows through. */}
         {showImage && (
           <Image
-            source={{ uri: product.imageUrl }}
+            source={{ uri: imageUri }}
             style={styles.image}
             resizeMode="cover"
-            onError={() => setErroredUri(product.imageUrl)}
+            onError={() => setErroredUri(imageUri)}
             accessible
             accessibilityRole="image"
             accessibilityLabel={imageLabel}
           />
         )}
 
-        {/* Bottom-left: New / Sale badges */}
+        {/* Bottom-left: Sale badge (no automatic New badge — owner decision). */}
         <View style={styles.badgesRow}>
-          {product.isNew && (
-            <View style={styles.badgeNew}>
-              <Text style={styles.badgeNewText}>New</Text>
-            </View>
-          )}
-          {product.isOnSale && (
+          {model.isOnSale && (
             <View style={styles.badgeSale}>
               <Text style={styles.badgeSaleText}>Sale</Text>
             </View>
@@ -99,13 +104,13 @@ export function ProductCard({
         {showFav && (
           <Pressable
             style={styles.heartBtn}
-            onPress={() => toggleFavorite(product.id)}
+            onPress={onToggleFavorite}
             hitSlop={8}
             accessibilityRole="button"
             accessibilityLabel={
               favorited
-                ? `Remove ${product.name} from favorites`
-                : `Add ${product.name} to favorites`
+                ? `Remove ${model.name} from favorites`
+                : `Add ${model.name} to favorites`
             }
             accessibilityState={{ selected: favorited }}
           >
@@ -123,34 +128,46 @@ export function ProductCard({
         {categoryLabel ? (
           <Text style={styles.categoryLabel}>{categoryLabel}</Text>
         ) : null}
-        <Text style={styles.brand} numberOfLines={1}>{product.brand}</Text>
-        <Text style={styles.name} numberOfLines={2}>{product.name}</Text>
+        {model.brand.trim().length > 0 ? (
+          <Text style={styles.brand} numberOfLines={1}>{model.brand}</Text>
+        ) : null}
+        <Text style={styles.name} numberOfLines={2}>{model.name}</Text>
 
         {/* Footer: price (left) + quick-add button (right) */}
         <View style={styles.footerRow}>
           <View style={styles.priceBlock}>
-            <Text style={styles.price}>${product.price.toFixed(2)}</Text>
-            {product.originalPrice != null && (
+            <Text style={styles.price}>{formatPrice(model.price, model.currencyCode)}</Text>
+            {model.compareAtPrice != null && (
               <Text style={styles.originalPrice}>
-                ${product.originalPrice.toFixed(2)}
+                {formatPrice(model.compareAtPrice, model.currencyCode)}
               </Text>
             )}
           </View>
 
           {showAdd && (
             <Pressable
-              style={[styles.addBtn, outOfStock && styles.addBtnDisabled]}
-              onPress={() => addToCart(product.id)}
-              disabled={outOfStock}
+              style={[styles.addBtn, quickAddDisabled && styles.addBtnDisabled]}
+              onPress={quickAddDisabled ? undefined : onQuickAdd}
+              disabled={quickAddDisabled}
               hitSlop={6}
               accessibilityRole="button"
-              accessibilityLabel={`Add ${product.name} to cart`}
-              accessibilityState={{ disabled: outOfStock }}
+              accessibilityLabel={
+                quickAddDisabled
+                  ? `${model.name} is out of stock`
+                  : quickAddKind === 'openDetail'
+                    ? `Choose options for ${model.name}`
+                    : `Add ${model.name} to cart`
+              }
+              accessibilityState={{ disabled: quickAddDisabled }}
             >
-              {outOfStock ? (
+              {quickAddDisabled ? (
                 <Text style={styles.addBtnOosText}>Out</Text>
               ) : (
-                <Ionicons name="add" size={18} color="#fff" />
+                <Ionicons
+                  name={quickAddKind === 'openDetail' ? 'ellipsis-horizontal' : 'add'}
+                  size={18}
+                  color="#fff"
+                />
               )}
             </Pressable>
           )}
@@ -172,11 +189,8 @@ const styles = StyleSheet.create({
     opacity: 0.65,
   },
 
-  // Image area. The colored background is the placeholder shown for mock
-  // `placeholder:*` products and as the fallback when a remote image fails; a
-  // real <Image> (styles.image) fills it edge-to-edge when present. Overlays
-  // (badges, out-of-stock, heart) are absolutely positioned so they sit above
-  // the image without relying on container padding.
+  // Image area. The colored background shows through when Shopify has no image
+  // or a remote image fails; a real <Image> fills it edge-to-edge when present.
   imageArea: {
     width: '100%',
     backgroundColor: '#EEEDF4',
@@ -194,17 +208,6 @@ const styles = StyleSheet.create({
     left: 8,
     flexDirection: 'row',
     gap: 4,
-  },
-  badgeNew: {
-    backgroundColor: '#FCE4EC',
-    borderRadius: 6,
-    paddingHorizontal: 7,
-    paddingVertical: 3,
-  },
-  badgeNewText: {
-    fontSize: 10,
-    fontWeight: '700',
-    color: PINK,
   },
   badgeSale: {
     backgroundColor: '#FFF3E0',

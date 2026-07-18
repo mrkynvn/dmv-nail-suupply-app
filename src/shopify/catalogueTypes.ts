@@ -1,10 +1,10 @@
 // App-facing catalogue model (M41S2A).
 //
-// These are the normalized shapes the rest of the app will consume once screens
-// are wired to Shopify. They are deliberately decoupled from both the raw
-// Storefront GraphQL responses (see catalogueQueries.ts) and the legacy mock
-// `Product`/`Category` types in src/data — the adapters in catalogueAdapters.ts
-// translate raw Storefront data into these. No UI imports these yet.
+// These are the normalized shapes the app consumes for every product surface.
+// They are deliberately decoupled from the raw Storefront GraphQL responses (see
+// catalogueQueries.ts); the adapters in catalogueAdapters.ts translate raw
+// Storefront data into these, and the UI-layer ProductCardModel adapts them for
+// rendering.
 //
 // Identity conventions (owner decision M41S2, item 2):
 //   - `handle` is the stable, human-readable key persisted for favorites and
@@ -46,6 +46,19 @@ export interface ProductVariant {
   image: ProductImage | null;
 }
 
+// The single representative variant a card/list product exposes:
+// Storefront's `selectedOrFirstAvailableVariant`. It is the ONLY basis for
+// proving sale state and single-variant Quick Add — never priceRange minima.
+// Present whenever the product has at least one variant (an out-of-stock product
+// still yields one, with `availableForSale: false`).
+export interface RepresentativeVariant {
+  id: string;
+  title: string;
+  availableForSale: boolean;
+  price: Money;
+  compareAtPrice: Money | null;
+}
+
 // A catalogue product in app-model form. Products fetched from list/search
 // queries carry an empty `variants` array (variants are only queried on the
 // product-by-handle detail fetch); `hasVariantDetail` distinguishes the two.
@@ -62,10 +75,23 @@ export interface CatalogueProduct {
   // Price span across variants (equal min/max for single-price products).
   minPrice: Money;
   maxPrice: Money;
-  // Effective compare-at price when the product is discounted, else null.
+  // Effective compare-at price when the product is discounted, else null. Proven
+  // from `representativeVariant` (same-variant compare-at > price), NOT from the
+  // compare-at price *range* — so it is a true, displayable discount.
   compareAtPrice: Money | null;
   isOnSale: boolean;
   availableForSale: boolean;
+  // Creation timestamp (ISO); backs deterministic New Arrivals ordering. Null
+  // only if Storefront omitted it.
+  createdAt: string | null;
+  // Variant count and whether it is exact. `variantCountExact === false` means
+  // the store reports "at least N" (AT_LEAST precision) and the count is a floor,
+  // so single-variant Quick Add is never offered on it.
+  variantCount: number;
+  variantCountExact: boolean;
+  // The representative variant (see above), or null if the product has no
+  // variant at all (never expected for a real published product).
+  representativeVariant: RepresentativeVariant | null;
   variants: ProductVariant[];
   hasVariantDetail: boolean;
   defaultVariantId: string | null;

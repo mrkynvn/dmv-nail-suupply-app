@@ -3,18 +3,23 @@ import {
   Text,
   StyleSheet,
   SafeAreaView,
-  ScrollView,
+  FlatList,
   Pressable,
+  useWindowDimensions,
 } from 'react-native';
 import { router } from 'expo-router';
 import Ionicons from '@expo/vector-icons/Ionicons';
-import { products } from '../../src/data';
 import { useFavorites } from '../../src/favorites/FavoritesContext';
-import { ProductCard } from '../../components/products/ProductCard';
+import { useResolvedProducts } from '../../components/products/useResolvedProducts';
+import { ShopifyProductCard } from '../../components/products/ShopifyProductCard';
+import { catalogueProductToCardModel } from '../../components/products/productCardModel';
+import type { CatalogueProduct } from '../../src/shopify';
+import { LoadingState, ErrorState } from '../../components/ui/AsyncStates';
+import { productGridColumns, gridItemWidth } from '../../components/ui/grid';
 
 const PINK = '#D81B60';
-
-// ── Empty state ───────────────────────────────────────────────────────────────
+const SCREEN_PADDING = 16;
+const GRID_GAP = 12;
 
 function EmptyState() {
   return (
@@ -24,56 +29,63 @@ function EmptyState() {
       <Text style={styles.emptySubtitle}>
         Tap the heart on a product to save it here.
       </Text>
-      <Pressable
-        style={styles.browseButton}
-        onPress={() => router.push('/(tabs)/')}
-      >
+      <Pressable style={styles.browseButton} onPress={() => router.push('/(tabs)/')}>
         <Text style={styles.browseButtonText}>Browse products</Text>
       </Pressable>
     </View>
   );
 }
 
-// ── Favorites screen ──────────────────────────────────────────────────────────
-
 export default function FavoritesScreen() {
-  const { favoriteIds, hydrated } = useFavorites();
-  const favoriteProducts = products.filter((p) => favoriteIds.includes(p.id));
+  const { favorites, hydrated, pruneFavorites } = useFavorites();
+  const { width } = useWindowDimensions();
+
+  // Resolve all favorited GIDs in one request; preserve order; prune deleted.
+  const { state, reload } = useResolvedProducts(
+    favorites.map((f) => f.gid),
+    pruneFavorites,
+  );
+
+  const columns = productGridColumns(width);
+  const itemWidth = gridItemWidth(width, columns, SCREEN_PADDING, GRID_GAP);
+  const savedCount = favorites.length;
 
   return (
     <SafeAreaView style={styles.safeArea}>
       {/* Header */}
       <View style={styles.header}>
         <Text style={styles.headerTitle}>Favorites</Text>
-        {favoriteProducts.length > 0 && (
-          <Text style={styles.headerCount}>{favoriteProducts.length} saved</Text>
-        )}
+        {savedCount > 0 && <Text style={styles.headerCount}>{savedCount} saved</Text>}
       </View>
 
-      {favoriteProducts.length === 0 ? (
-        hydrated ? <EmptyState /> : null
+      {!hydrated ? null : savedCount === 0 ? (
+        <EmptyState />
+      ) : state.status === 'loading' ? (
+        <LoadingState label="Loading favorites…" />
+      ) : state.status === 'error' ? (
+        <ErrorState message="Couldn’t load your favorites." onRetry={reload} />
+      ) : state.products.length === 0 ? (
+        <EmptyState />
       ) : (
-        <ScrollView
-          style={styles.scroll}
-          showsVerticalScrollIndicator={false}
+        <FlatList<CatalogueProduct>
+          key={columns}
+          data={state.products}
+          numColumns={columns}
+          keyExtractor={(p) => p.id}
           contentContainerStyle={styles.grid}
-        >
-          {favoriteProducts.map((product) => (
-            <ProductCard
-              key={product.id}
-              product={product}
-              onPress={() => router.push(`/product/${product.id}`)}
-              showFavorite
-              style={styles.favCard}
+          columnWrapperStyle={columns > 1 ? { gap: GRID_GAP } : undefined}
+          showsVerticalScrollIndicator={false}
+          renderItem={({ item }) => (
+            <ShopifyProductCard
+              model={catalogueProductToCardModel(item)}
+              style={{ width: itemWidth, marginBottom: GRID_GAP }}
             />
-          ))}
-        </ScrollView>
+          )}
+        />
       )}
     </SafeAreaView>
   );
 }
-
-// ── Styles ────────────────────────────────────────────────────────────────────
 
 const styles = StyleSheet.create({
   safeArea: {
@@ -105,20 +117,9 @@ const styles = StyleSheet.create({
   },
 
   // Grid
-  scroll: {
-    flex: 1,
-  },
   grid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    padding: 16,
-    gap: 12,
+    padding: SCREEN_PADDING,
     paddingBottom: 32,
-  },
-
-  // Favorites grid card (fixed width to fill 2-column wrap layout)
-  favCard: {
-    width: 165,
   },
 
   // Empty state

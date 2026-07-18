@@ -11,14 +11,8 @@ import {
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { useRouter } from 'expo-router';
 import * as WebBrowser from 'expo-web-browser';
-import {
-  useCart,
-  getLineKey,
-  MockCartItem,
-  ShopifyCartItem,
-} from '../src/cart/CartContext';
+import { useCart, getLineKey, ShopifyCartItem } from '../src/cart/CartContext';
 import { createShopifyCheckout } from '../src/shopify';
-import { getProductById } from '../src/data';
 
 const PINK = '#D81B60';
 
@@ -28,31 +22,9 @@ function formatMoney(amount: number, currencyCode: string): string {
     : `${amount.toFixed(2)} ${currencyCode}`;
 }
 
-// A mock line prices live from the local catalogue. Returns null if the product
-// id no longer resolves (mirrors the cart tab's guard).
-function MockReviewLine({ item }: { item: MockCartItem }) {
-  const product = getProductById(item.productId);
-  if (!product) return null;
-  const lineTotal = product.price * item.quantity;
-  return (
-    <View style={styles.lineItem}>
-      <View style={styles.lineItemLeft}>
-        <Text style={styles.lineItemBrand}>{product.brand}</Text>
-        <Text style={styles.lineItemName} numberOfLines={2}>
-          {product.name}
-        </Text>
-        <Text style={styles.lineItemUnitPrice}>
-          ${product.price.toFixed(2)} each · Qty: {item.quantity}
-        </Text>
-      </View>
-      <Text style={styles.lineItemTotal}>${lineTotal.toFixed(2)}</Text>
-    </View>
-  );
-}
-
-// A Shopify line renders entirely from denormalized fields captured at add-time,
-// so it never depends on the mock catalogue or the Shopify cache.
-function ShopifyReviewLine({ item }: { item: ShopifyCartItem }) {
+// A cart line renders entirely from denormalized fields captured at add-time, so
+// it never depends on any catalogue.
+function ReviewLine({ item }: { item: ShopifyCartItem }) {
   const lineTotal = item.unitPrice * item.quantity;
   return (
     <View style={styles.lineItem}>
@@ -79,7 +51,7 @@ function ShopifyReviewLine({ item }: { item: ShopifyCartItem }) {
 
 export default function CheckoutScreen() {
   const router = useRouter();
-  const { items, subtotal, totalQuantity } = useCart();
+  const { items, subtotal, totalQuantity, currencyCode, currencyConsistent } = useCart();
 
   const [status, setStatus] = useState<'idle' | 'loading'>('idle');
   const [error, setError] = useState<string | null>(null);
@@ -88,36 +60,23 @@ export default function CheckoutScreen() {
   // about whether an order was placed. Non-persistent (resets on unmount).
   const [checkoutReturned, setCheckoutReturned] = useState(false);
 
-  const shopifyItems = items.filter(
-    (i): i is ShopifyCartItem => i.source === 'shopify'
-  );
-  const hasShopify = shopifyItems.length > 0;
-  const hasMock = items.some((i) => i.source === 'mock');
-  const isMixed = hasShopify && hasMock;
+  // Every non-empty cart is Shopify checkout eligible.
+  const canCheckout = items.length > 0;
 
-  // Only a pure Shopify cart can hand off to secure checkout. Mixed and mock-only
-  // carts are blocked (see UX copy below) so we never silently drop items.
-  const canCheckout = hasShopify && !hasMock;
-
-  // Create a Storefront cart from the Shopify lines and open Shopify's hosted
-  // secure checkout in an in-app browser (SFSafariViewController on iOS). We do
-  // NOT persist the cart, clear the cart, or claim the order completed here.
+  // Create a Storefront cart from the cart lines and open Shopify's hosted secure
+  // checkout in an in-app browser. We do NOT persist the cart, clear the cart, or
+  // claim the order completed here.
   const handleCheckout = async () => {
     if (!canCheckout || status === 'loading') return;
-    // Fresh attempt: clear any prior error and the returned-from-checkout notice.
     setError(null);
     setCheckoutReturned(false);
     setStatus('loading');
     try {
-      const lines = shopifyItems.map((i) => ({
-        variantId: i.variantId,
-        quantity: i.quantity,
-      }));
+      const lines = items.map((i) => ({ variantId: i.variantId, quantity: i.quantity }));
       const { checkoutUrl } = await createShopifyCheckout(lines);
-      // Resolves when the in-app browser is dismissed/closed. We treat ANY
-      // return (cancel, dismiss, done) as simply "came back from checkout" —
-      // making no claim either way about order state. We do not inspect order
-      // state, do not clear the cart, and do not persist anything.
+      // Resolves when the in-app browser is dismissed/closed. We treat ANY return
+      // (cancel, dismiss, done) as simply "came back from checkout" — making no
+      // claim about order state, not clearing the cart, not persisting anything.
       await WebBrowser.openBrowserAsync(checkoutUrl);
       setCheckoutReturned(true);
     } catch {
@@ -144,13 +103,12 @@ export default function CheckoutScreen() {
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
       >
-        {/* Catalogue-only notice */}
+        {/* Secure-checkout notice */}
         <View style={styles.noticeCard}>
           <Ionicons name="information-circle-outline" size={22} color={PINK} />
           <Text style={styles.noticeText}>
-            Catalogue items check out on Shopify's secure checkout. Payment and
-            delivery are handled by Shopify, not inside this app. Sample/demo
-            items are for display only.
+            Your items check out on Shopify's secure checkout. Payment and delivery
+            are handled by Shopify, not inside this app.
           </Text>
         </View>
 
@@ -158,10 +116,7 @@ export default function CheckoutScreen() {
           <View style={styles.emptyContainer}>
             <Ionicons name="cart-outline" size={56} color="#DDDDDD" />
             <Text style={styles.emptyText}>You haven't selected any items yet.</Text>
-            <Pressable
-              style={styles.continueShoppingBtn}
-              onPress={() => router.push('/')}
-            >
+            <Pressable style={styles.continueShoppingBtn} onPress={() => router.push('/')}>
               <Text style={styles.continueShoppingText}>Continue Shopping</Text>
             </Pressable>
           </View>
@@ -176,91 +131,66 @@ export default function CheckoutScreen() {
 
               <View style={styles.divider} />
 
-              {items.map((item) =>
-                item.source === 'shopify' ? (
-                  <ShopifyReviewLine key={getLineKey(item)} item={item} />
-                ) : (
-                  <MockReviewLine key={getLineKey(item)} item={item} />
-                )
-              )}
+              {items.map((item) => (
+                <ReviewLine key={getLineKey(item)} item={item} />
+              ))}
 
               <View style={styles.divider} />
 
               <View style={styles.subtotalRow}>
                 <Text style={styles.subtotalLabel}>Subtotal</Text>
-                <Text style={styles.subtotalValue}>${subtotal.toFixed(2)}</Text>
+                <Text style={styles.subtotalValue}>
+                  {currencyConsistent && currencyCode
+                    ? formatMoney(subtotal, currencyCode)
+                    : '—'}
+                </Text>
               </View>
             </View>
 
-            {canCheckout ? (
-              <View style={styles.checkoutBlock}>
-                <Text style={styles.secureCopy}>
-                  Continuing opens Shopify's secure checkout in a private browser
-                  window to complete your purchase. Final taxes and shipping are
-                  shown there.
-                </Text>
+            <View style={styles.checkoutBlock}>
+              <Text style={styles.secureCopy}>
+                Continuing opens Shopify's secure checkout in a private browser
+                window to complete your purchase. Final taxes and shipping are
+                shown there.
+              </Text>
 
-                {error ? (
-                  <View style={styles.errorRow}>
-                    <Ionicons name="warning-outline" size={16} color="#B00020" />
-                    <Text style={styles.errorText}>{error}</Text>
-                  </View>
-                ) : null}
+              {error ? (
+                <View style={styles.errorRow}>
+                  <Ionicons name="warning-outline" size={16} color="#B00020" />
+                  <Text style={styles.errorText}>{error}</Text>
+                </View>
+              ) : null}
 
-                <Pressable
-                  style={[
-                    styles.checkoutBtn,
-                    status === 'loading' && styles.checkoutBtnDisabled,
-                  ]}
-                  onPress={handleCheckout}
-                  disabled={status === 'loading'}
-                  accessibilityRole="button"
-                  accessibilityState={{ disabled: status === 'loading' }}
-                  accessibilityLabel="Continue to secure checkout"
-                >
-                  {status === 'loading' ? (
-                    <>
-                      <ActivityIndicator size="small" color="#fff" />
-                      <Text style={styles.checkoutBtnText}>
-                        Preparing secure checkout…
-                      </Text>
-                    </>
-                  ) : (
-                    <Text style={styles.checkoutBtnText}>
-                      Continue to Secure Checkout
-                    </Text>
-                  )}
-                </Pressable>
+              <Pressable
+                style={[styles.checkoutBtn, status === 'loading' && styles.checkoutBtnDisabled]}
+                onPress={handleCheckout}
+                disabled={status === 'loading'}
+                accessibilityRole="button"
+                accessibilityState={{ disabled: status === 'loading' }}
+                accessibilityLabel="Continue to secure checkout"
+              >
+                {status === 'loading' ? (
+                  <>
+                    <ActivityIndicator size="small" color="#fff" />
+                    <Text style={styles.checkoutBtnText}>Preparing secure checkout…</Text>
+                  </>
+                ) : (
+                  <Text style={styles.checkoutBtnText}>Continue to Secure Checkout</Text>
+                )}
+              </Pressable>
 
-                {checkoutReturned && !error ? (
-                  <View style={styles.returnedNotice}>
-                    <Ionicons
-                      name="information-circle-outline"
-                      size={16}
-                      color={PINK}
-                    />
-                    <Text style={styles.returnedNoticeText}>
-                      If you completed checkout, Shopify will send confirmation.
-                      Your cart stays here until you remove items.
-                    </Text>
-                  </View>
-                ) : null}
-              </View>
-            ) : (
-              <View style={styles.blockNote}>
-                <Ionicons name="alert-circle-outline" size={18} color="#B0004E" />
-                <Text style={styles.blockNoteText}>
-                  {isMixed
-                    ? 'To continue to secure checkout, remove the sample/demo items from your cart. Only catalogue items can be purchased.'
-                    : 'These are sample/demo items and can’t be purchased. Add catalogue products to check out.'}
-                </Text>
-              </View>
-            )}
+              {checkoutReturned && !error ? (
+                <View style={styles.returnedNotice}>
+                  <Ionicons name="information-circle-outline" size={16} color={PINK} />
+                  <Text style={styles.returnedNoticeText}>
+                    If you completed checkout, Shopify will send confirmation. Your
+                    cart stays here until you remove items.
+                  </Text>
+                </View>
+              ) : null}
+            </View>
 
-            <Pressable
-              style={styles.continueShoppingBtn}
-              onPress={() => router.push('/')}
-            >
+            <Pressable style={styles.continueShoppingBtn} onPress={() => router.push('/')}>
               <Text style={styles.continueShoppingText}>Continue Shopping</Text>
             </Pressable>
           </>
@@ -484,24 +414,6 @@ const styles = StyleSheet.create({
     flex: 1,
     fontSize: 12,
     color: '#B00020',
-    fontWeight: '500',
-    lineHeight: 17,
-  },
-
-  blockNote: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: 8,
-    backgroundColor: '#FFF5F8',
-    borderWidth: 1,
-    borderColor: '#F8BBD0',
-    borderRadius: 12,
-    padding: 12,
-  },
-  blockNoteText: {
-    flex: 1,
-    fontSize: 12,
-    color: '#B0004E',
     fontWeight: '500',
     lineHeight: 17,
   },

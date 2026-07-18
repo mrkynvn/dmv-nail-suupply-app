@@ -41,7 +41,15 @@ const VARIANT_FRAGMENT = `
 `;
 
 // Fields sufficient to render a product card / list tile without querying every
-// variant. Sale state is derivable from priceRange vs compareAtPriceRange.
+// variant.
+//
+// Sale state and Quick-Add eligibility are proven from a single representative
+// variant — `selectedOrFirstAvailableVariant` — NOT from priceRange vs
+// compareAtPriceRange (which can falsely flag a sale when *different* variants
+// hold the min price and the min compare-at). `variantsCount { count precision }`
+// gives an exact/at-least count so a card only offers direct add when it can
+// prove there is exactly one variant. `createdAt` backs deterministic
+// New Arrivals ordering. (M41S6E)
 const PRODUCT_CARD_FRAGMENT = `
   fragment ProductCardFields on Product {
     id
@@ -52,8 +60,20 @@ const PRODUCT_CARD_FRAGMENT = `
     productType
     tags
     availableForSale
+    createdAt
     updatedAt
     featuredImage { ...ImageFields }
+    variantsCount {
+      count
+      precision
+    }
+    selectedOrFirstAvailableVariant {
+      id
+      title
+      availableForSale
+      price { ...MoneyFields }
+      compareAtPrice { ...MoneyFields }
+    }
     priceRange {
       minVariantPrice { ...MoneyFields }
       maxVariantPrice { ...MoneyFields }
@@ -166,6 +186,42 @@ export const PRODUCT_SEARCH_QUERY = op(
   MONEY_FRAGMENT
 );
 
+// New Arrivals (M41S6E): newest products first. The sort key/direction are fixed
+// in the query text — CREATED_AT descending — so ordering is deterministic and
+// cannot drift from a caller-supplied argument. No "New" time-window badge is
+// derived from this (owner decision).
+export const NEW_ARRIVALS_QUERY = op(
+  `
+    query NewArrivals($first: Int!) {
+      products(first: $first, sortKey: CREATED_AT, reverse: true) {
+        nodes { ...ProductCardFields }
+      }
+    }
+  `,
+  PRODUCT_CARD_FRAGMENT,
+  IMAGE_FRAGMENT,
+  MONEY_FRAGMENT
+);
+
+// Bulk product resolution by GID (M41S6E) for Favorites / Recently Viewed, which
+// persist Shopify product GIDs. `nodes(ids:)` returns results positionally
+// aligned with the input ids; a deleted/unpublished/non-Product id yields null
+// (or a non-Product node), which callers prune. `__typename` guards the union so
+// only real Product nodes are adapted.
+export const PRODUCT_NODES_QUERY = op(
+  `
+    query ProductNodes($ids: [ID!]!) {
+      nodes(ids: $ids) {
+        __typename
+        ... on Product { ...ProductCardFields }
+      }
+    }
+  `,
+  PRODUCT_CARD_FRAGMENT,
+  IMAGE_FRAGMENT,
+  MONEY_FRAGMENT
+);
+
 // --- Raw response typings ----------------------------------------------------
 // Mirror the selections above exactly. These describe what Storefront returns,
 // before normalization by catalogueAdapters.ts.
@@ -199,6 +255,28 @@ export interface RawPriceRange {
   maxVariantPrice: RawMoney;
 }
 
+// Storefront `ProductVariantsCountPrecision`. EXACT means `count` is the true
+// number of variants; AT_LEAST means the store has more variants than the API
+// will count precisely (so the count is a floor, never proof of "exactly one").
+export type RawVariantsCountPrecision = 'EXACT' | 'AT_LEAST';
+
+export interface RawVariantsCount {
+  count: number;
+  precision: RawVariantsCountPrecision;
+}
+
+// The representative variant used to prove sale state and single-variant Quick
+// Add: `selectedOrFirstAvailableVariant`. Present for any product with at least
+// one variant (it falls back to the first variant when none are available, so an
+// out-of-stock product still returns a variant with availableForSale=false).
+export interface RawCardVariant {
+  id: string;
+  title: string;
+  availableForSale: boolean;
+  price: RawMoney;
+  compareAtPrice: RawMoney | null;
+}
+
 export interface RawProductCard {
   id: string;
   handle: string;
@@ -208,8 +286,11 @@ export interface RawProductCard {
   productType: string;
   tags: string[];
   availableForSale: boolean;
+  createdAt: string;
   updatedAt: string;
   featuredImage: RawImage | null;
+  variantsCount: RawVariantsCount | null;
+  selectedOrFirstAvailableVariant: RawCardVariant | null;
   priceRange: RawPriceRange;
   compareAtPriceRange: RawPriceRange;
 }
@@ -299,4 +380,31 @@ export interface ProductSearchQueryVars {
   query: string;
   first: number;
   after?: string | null;
+}
+
+export interface NewArrivalsQueryData {
+  products: {
+    nodes: RawProductCard[];
+  };
+}
+
+export interface NewArrivalsQueryVars {
+  first: number;
+}
+
+// `nodes(ids:)` returns Node interface members. Each element is a Product node
+// (carrying ProductCardFields plus __typename), null (deleted/unknown id), or a
+// non-Product node (only __typename resolves). Typed as a permissive union the
+// adapter narrows on `__typename`.
+export type RawNode =
+  | (RawProductCard & { __typename: 'Product' })
+  | { __typename: string }
+  | null;
+
+export interface ProductNodesQueryData {
+  nodes: RawNode[];
+}
+
+export interface ProductNodesQueryVars {
+  ids: string[];
 }

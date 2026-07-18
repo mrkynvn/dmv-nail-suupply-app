@@ -9,17 +9,28 @@
 // request a checkout URL, or use the Admin API.
 
 import { getStorefrontClient } from './client';
-import { adaptCollection, adaptPageInfo, adaptProductCard, adaptProductDetail } from './catalogueAdapters';
+import {
+  adaptCollection,
+  adaptPageInfo,
+  adaptProductCard,
+  adaptProductDetail,
+  adaptProductNodes,
+  type ResolvedProductNode,
+} from './catalogueAdapters';
 import { cacheProduct, cacheProducts } from './catalogueCache';
 import {
   COLLECTION_PRODUCTS_QUERY,
   COLLECTIONS_QUERY,
+  NEW_ARRIVALS_QUERY,
   PRODUCT_BY_HANDLE_QUERY,
+  PRODUCT_NODES_QUERY,
   PRODUCT_SEARCH_QUERY,
   type CollectionProductsQueryData,
   type CollectionsQueryData,
+  type NewArrivalsQueryData,
   type ProductByHandleQueryData,
   type ProductCollectionSortKey,
+  type ProductNodesQueryData,
   type ProductSearchQueryData,
 } from './catalogueQueries';
 import type {
@@ -29,6 +40,17 @@ import type {
   CollectionSortOption,
   Paginated,
 } from './catalogueTypes';
+
+export type { ResolvedProductNode } from './catalogueAdapters';
+
+// How many New Arrivals the app requests (Home shows the first 10).
+const NEW_ARRIVALS_COUNT = 10;
+
+// The sole approved source of sale candidates (owner decision M41S6E): an
+// automated Shopify collection. Membership does NOT by itself prove a discount —
+// callers still apply the exact same-variant sale guard (CatalogueProduct.isOnSale)
+// and omit products that are not provably discounted.
+export const SALE_COLLECTION_HANDLE = 'app-on-sale';
 
 // Default page size for list/search queries when a caller does not specify one.
 const DEFAULT_PAGE_SIZE = 24;
@@ -153,4 +175,31 @@ export async function searchCatalogueProducts(
   const items = data.products.nodes.map(adaptProductCard);
   cacheProducts(items);
   return { items, pageInfo: adaptPageInfo(data.products.pageInfo) };
+}
+
+// Fetch the newest products (CREATED_AT descending) for the Home "New Arrivals"
+// rail. The sort is fixed in the query, so ordering is deterministic. Returns up
+// to `count` (default 10) normalized products.
+export async function fetchNewArrivals(count: number = NEW_ARRIVALS_COUNT): Promise<CatalogueProduct[]> {
+  const data = await runQuery<NewArrivalsQueryData>(NEW_ARRIVALS_QUERY, { first: count });
+  const items = data.products.nodes.map(adaptProductCard);
+  cacheProducts(items);
+  return items;
+}
+
+// Resolve a set of product GIDs (persisted by Favorites / Recently Viewed) to
+// products in ONE request, preserving the requested order. Each entry carries
+// its gid and either the product or null (deleted/unpublished/non-Product) so
+// callers can prune stale identities. An empty input short-circuits with no
+// request. Never throws because one node is null.
+export async function resolveProductsByGids(gids: string[]): Promise<ResolvedProductNode[]> {
+  if (gids.length === 0) return [];
+  const data = await runQuery<ProductNodesQueryData>(PRODUCT_NODES_QUERY, { ids: gids });
+  const resolved = adaptProductNodes(gids, data.nodes);
+  cacheProducts(
+    resolved
+      .map((r) => r.product)
+      .filter((p): p is CatalogueProduct => p !== null)
+  );
+  return resolved;
 }
