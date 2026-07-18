@@ -149,7 +149,10 @@ export function ProductCard({
               style={[styles.addBtn, quickAddDisabled && styles.addBtnDisabled]}
               onPress={quickAddDisabled ? undefined : onQuickAdd}
               disabled={quickAddDisabled}
-              hitSlop={6}
+              // 28pt visible button + 9pt hitSlop per side = 46x46 effective
+              // touch target (>= Apple's 44pt minimum), matching the heart
+              // button's ~46x46 practical target. Visible size unchanged.
+              hitSlop={9}
               accessibilityRole="button"
               accessibilityLabel={
                 quickAddDisabled
