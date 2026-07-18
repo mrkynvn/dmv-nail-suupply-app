@@ -38,8 +38,7 @@
           "image": "./assets/images/dmv-logo.png",
           "imageWidth": 180
         }
-      ],
-      "expo-font"
+      ]
     ],
     "extra": {
       "eas": {
