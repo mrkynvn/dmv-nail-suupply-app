@@ -46,11 +46,21 @@ export type { ResolvedProductNode } from './catalogueAdapters';
 // How many New Arrivals the app requests (Home shows the first 10).
 const NEW_ARRIVALS_COUNT = 10;
 
-// The sole approved source of sale candidates (owner decision M41S6E): an
-// automated Shopify collection. Membership does NOT by itself prove a discount —
-// callers still apply the exact same-variant sale guard (CatalogueProduct.isOnSale)
-// and omit products that are not provably discounted.
-export const SALE_COLLECTION_HANDLE = 'app-on-sale';
+// The sole approved source of sale candidates (owner decision M41S6E): a
+// Shopify collection. Membership does NOT by itself prove a discount — callers
+// still apply the exact same-variant sale guard (CatalogueProduct.isOnSale) and
+// omit products that are not provably discounted.
+//
+// M41S8-FIX1: the DC store publishes this as `promotion`; the previous
+// `app-on-sale` handle does not exist there, so the collection resolved null and
+// every sale surface rendered empty. The sale guard below is unchanged.
+export const SALE_COLLECTION_HANDLE = 'promotion';
+
+// Source of the Home "Featured Products" rail (M41S8-FIX1). This is a curated
+// merchandising collection: its order is the merchandiser's, so callers preserve
+// Shopify's default ordering and must NOT apply the sale guard — being featured
+// is not a discount claim.
+export const FEATURED_COLLECTION_HANDLE = 'featured';
 
 // Default page size for list/search queries when a caller does not specify one.
 const DEFAULT_PAGE_SIZE = 24;

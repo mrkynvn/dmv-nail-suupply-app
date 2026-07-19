@@ -95,7 +95,7 @@ export default function PromotionsScreen() {
   const { width } = useWindowDimensions();
   const [activeFilter, setActiveFilter] = useState<string>(ALL_DEALS);
 
-  // Load app-on-sale pages; apply the exact same-variant sale guard per page so
+  // Load sale-collection pages; apply the exact same-variant sale guard per page so
   // only provably-discounted products appear. Collection ordering is preserved.
   const {
     items,

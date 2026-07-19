@@ -22,6 +22,7 @@ export {
   resolveProductsByGids,
   searchCatalogueProducts,
   SALE_COLLECTION_HANDLE,
+  FEATURED_COLLECTION_HANDLE,
 } from './catalogue';
 export type { ResolvedProductNode } from './catalogue';
 export type {

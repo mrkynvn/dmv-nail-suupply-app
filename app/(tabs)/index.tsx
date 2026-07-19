@@ -15,6 +15,7 @@ import {
   fetchCollectionProducts,
   fetchNewArrivals,
   SALE_COLLECTION_HANDLE,
+  FEATURED_COLLECTION_HANDLE,
 } from '../../src/shopify';
 import type { CatalogueCollection, CatalogueProduct } from '../../src/shopify';
 import { ShopifyProductCard } from '../../components/products/ShopifyProductCard';
@@ -34,6 +35,7 @@ const HOME_GRID_GAP = 10;
 const RAIL_CARD_WIDTH = 165;
 const SALE_FETCH_COUNT = 30; // fetch enough to fill the rail after the sale guard
 const SALE_RAIL_COUNT = 10;
+const FEATURED_RAIL_COUNT = 10; // no client-side filter, so request exactly what we show
 
 // ── Product rail (horizontal scroll of live Shopify products) ────────────────
 
@@ -149,8 +151,23 @@ export default function HomeScreen() {
     reload: reloadNew,
   } = useAsyncData<CatalogueProduct[]>(() => fetchNewArrivals(SALE_RAIL_COUNT), []);
 
-  // On Sale — from the app-on-sale collection, with the exact same-variant sale
-  // guard applied client-side (omit anything not provably discounted). Collection
+  // Featured Products — the curated `featured` collection, in Shopify's own
+  // order. No sale guard and no local sort: this rail makes no discount claim,
+  // and reordering would override the merchandiser's intent. No fallback source.
+  const {
+    data: featured,
+    loading: featuredLoading,
+    error: featuredError,
+    reload: reloadFeatured,
+  } = useAsyncData<CatalogueProduct[]>(async () => {
+    const page = await fetchCollectionProducts(FEATURED_COLLECTION_HANDLE, {
+      first: FEATURED_RAIL_COUNT,
+    });
+    return page.items;
+  }, []);
+
+  // On Sale — from the sale collection, with the exact same-variant sale guard
+  // applied client-side (omit anything not provably discounted). Collection
   // ordering is preserved (owner decision v1).
   const {
     data: onSale,
@@ -249,6 +266,21 @@ export default function HomeScreen() {
           loading={newLoading}
           error={newError}
           onRetry={reloadNew}
+        />
+
+        {/* Featured products */}
+        <AsyncProductRail
+          title="Featured Products"
+          products={featured}
+          loading={featuredLoading}
+          error={featuredError}
+          onRetry={reloadFeatured}
+          onSeeAll={() =>
+            router.push({
+              pathname: '/category/[categoryId]',
+              params: { categoryId: FEATURED_COLLECTION_HANDLE, title: 'Featured Products' },
+            })
+          }
         />
 
         {/* On sale */}
