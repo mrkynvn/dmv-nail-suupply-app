@@ -36,7 +36,7 @@ export type LocalOrderContact = {
 
 // One immutable local order record.
 // `id` is an opaque unique identifier used only for lookup and routing.
-// `orderNumber` is the human-readable display code (DMV-YYYYMMDD-XXXX).
+// `orderNumber` is the human-readable display code (DC-YYYYMMDD-XXXX).
 // The two are always distinct.
 export type LocalOrder = {
   id: string;

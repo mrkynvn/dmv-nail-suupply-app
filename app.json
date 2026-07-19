@@ -1,10 +1,10 @@
 {
   "expo": {
-    "name": "DMV Nail Supply",
+    "name": "DC Nail Supply LLC",
     "slug": "dmv-nail-supply-app",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/images/dmv-app-icon.png",
+    "icon": "./assets/images/dc-app-icon.png",
     "userInterfaceStyle": "light",
     "ios": {
       "supportsTablet": true,
@@ -35,7 +35,7 @@
         "expo-splash-screen",
         {
           "backgroundColor": "#FFFFFF",
-          "image": "./assets/images/dmv-logo.png",
+          "image": "./assets/images/dc-app-logo.png",
           "imageWidth": 180
         }
       ]

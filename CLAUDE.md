@@ -1,4 +1,4 @@
-# DMV Nail Supply App — Claude Instructions
+# DC Nail Supply LLC App — Claude Instructions
 
 ## Project Goal
 Build an iOS-first nail supply e-commerce mobile app based on the uploaded DC Nail Supply mockup.

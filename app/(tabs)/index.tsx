@@ -27,7 +27,7 @@ import { LoadingState, ErrorState, EmptyState } from '../../components/ui/AsyncS
 import { homeCategoryColumns, gridItemWidth } from '../../components/ui/grid';
 import { useRecentlyViewed } from '../../src/recentlyViewed/RecentlyViewedContext';
 
-const DMV_LOGO = require('../../assets/images/dmv-logo.png');
+const BRAND_LOGO = require('../../assets/images/dc-app-logo.png');
 
 const HOME_SECTION_PADDING = 20;
 const HOME_GRID_GAP = 10;
@@ -191,7 +191,7 @@ export default function HomeScreen() {
         {/* Header */}
         <View style={styles.header}>
           <View style={styles.logoWrap}>
-            <Image source={DMV_LOGO} style={styles.headerLogo} resizeMode="contain" />
+            <Image source={BRAND_LOGO} style={styles.headerLogo} resizeMode="contain" />
           </View>
           <Text style={styles.headerSubtitle}>
             Professional nail products for salons and artists
@@ -300,7 +300,7 @@ const styles = StyleSheet.create({
   },
   headerLogo: {
     width: 160,
-    height: 40,
+    height: 60,
   },
   headerSubtitle: {
     fontSize: 14,

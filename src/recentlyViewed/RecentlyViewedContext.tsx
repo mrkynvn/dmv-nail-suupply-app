@@ -8,7 +8,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 // (list of p-xxx ids) is discarded, not migrated, and removed on hydration.
 // Newest first, deduped by GID, capped at 10.
 
-const STORAGE_KEY = '@dmv_nail_supply/recently_viewed_v2';
+const STORAGE_KEY = '@dmv_nail_supply/recently_viewed_v3';
 const LEGACY_KEY = '@dmv_nail_supply/recently_viewed_product_ids';
 const STORE_VERSION = 2;
 const MAX_RECENT = 10;

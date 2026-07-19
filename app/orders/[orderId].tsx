@@ -28,7 +28,7 @@ export default function OrderDetailScreen() {
         <Text style={styles.stateTitle}>Previous local records</Text>
         <Text style={styles.stateMessage}>
           Orders cannot be placed through this app. Any records previously saved
-          on this device were not sent to DMV Nail Supply and do not represent
+          on this device were not sent to DC Nail Supply LLC and do not represent
           completed purchases.
         </Text>
         <Pressable style={styles.primaryBtn} onPress={() => router.push('/')}>

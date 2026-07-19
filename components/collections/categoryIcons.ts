@@ -1,7 +1,7 @@
 // Local category icon registry for collection tiles (M41S5A).
 //
 // Maps live Shopify collection HANDLES (not localized titles) to bundled
-// PNG icons from the DMV Nail Supply Category Icon System (assets/png/).
+// PNG icons from the DC Nail Supply Category Icon System (assets/png/).
 //
 // Bundle rule: only the icons actually used by the live collection mappings
 // (plus one generic fallback) are require()d here. The rest of the 49-icon

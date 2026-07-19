@@ -9,7 +9,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 // can use a reasonable value immediately, though screens prefer the fresh handle
 // returned by a live resolve.
 
-const STORAGE_KEY = '@dmv_nail_supply/favorites_v2';
+const STORAGE_KEY = '@dmv_nail_supply/favorites_v3';
 // Legacy mock favorites key (list of p-xxx ids). Discarded, not migrated.
 const LEGACY_KEY = '@dmv_nail_supply/favorite_product_ids';
 const STORE_VERSION = 2;

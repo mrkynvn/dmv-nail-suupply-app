@@ -1,8 +1,8 @@
-# DMV Nail Supply — Category Icon System
+# DC Nail Supply — Category Icon System
 
 **Version 1.0**
 
-A single, cohesive icon family built for the DMV Nail Supply iOS app (iPhone + iPad).
+A single, cohesive icon family built for the DC Nail Supply iOS app (iPhone + iPad).
 Designed as one flat, line-based system — one stroke weight, one corner radius, one
 optical rhythm — so it reads cleanly beside Apple SF Symbols.
 
@@ -87,7 +87,7 @@ LED Lamp diodes).
 
 ## License
 
-© 2026 DMV Nail Supply. Proprietary — for use within DMV Nail Supply digital
+© 2026 DC Nail Supply. Proprietary — for use within DC Nail Supply digital
 products and marketing only. Not for redistribution or resale as a standalone
 icon pack.
 
